@@ -31,7 +31,7 @@ check_and_update_system() {
     clear
     echo -e ""
     echo -e "${GREEN}    THÔNG TIN HỆ THỐNG VPS CỦA BẠN      ${NC}"
-    echo -e "                 ---------------------               "
+    echo -e "${GREEN}       -------------------------        ${NC}"
     echo -e " Hệ điều hành : ${YELLOW}$OS_NAME $OS_VER${NC}"
     echo -e " Chip xử lý    : ${YELLOW}$CPU_CORES Cores CPU${NC}"
     echo -e " Dung lượng RAM: ${YELLOW}$RAM_TOTAL${NC}"
@@ -51,7 +51,7 @@ check_and_update_system() {
 install_core() {
     echo -e ""
     echo -e "${BLUE}           BẮT ĐẦU CÀI ĐẶT SING-BOX              ${NC}"
-    echo -e "                      ----------------                       "
+    echo -e "${BLUE}              ----------------                   ${NC}"
     
     echo -e "${YELLOW}--> Đang tạo thư mục lưu trữ cấu hình...${NC}"
     mkdir -p $CONFIG_DIR

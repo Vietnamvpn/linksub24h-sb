@@ -15,7 +15,7 @@ clear
 echo -e ""
 echo -e "${GREEN}      CHÀO MỪNG BẠN ĐẾN VỚI HỆ THỐNG SING-BOX V3      ${NC}"
 echo -e "${GREEN}          -------------------------------             ${NC}"
-echo -e "${CYAN}  → Tác giả:${NC} Vietnamvpn"
+echo -e "${CYAN}  → Tác giả:${NC} Vietnamvpn | ${CYAN}website:${NC} https://linksub24h.com"
 echo -e "${CYAN}  → Phiên bản sing-box-core:${NC}${GREEN} v1.13.13${NC} SagerNet"
 echo -e "${GREEN}------------------------------------------------------${NC}"
 echo -e ""

@@ -12,11 +12,11 @@ APP_DIR="/usr/local/singbox-manager"
 
 clear
 # --- BẮT ĐẦU CHÀO MỪNG VÀ THÔNG TIN TÁC GIẢ ---
-echo -e "${GREEN}======================================================${NC}"
-echo -e "${GREEN}║      CHÀO MỪNG BẠN ĐẾN VỚI HỆ THỐNG SING-BOX V3      ║${NC}"
-echo -e "${GREEN}======================================================${NC}"
+echo -e ""
+echo -e "${GREEN}      CHÀO MỪNG BẠN ĐẾN VỚI HỆ THỐNG SING-BOX V3      ${NC}"
+echo -e ""
 echo -e "${CYAN}  → Tác giả: Vietnamvpn${NC}"
-echo -e "${CYAN}  → Phiên bản: Cấu trúc mới ổn định${NC}"
+echo -e "${CYAN}  → Phiên bản sing-box-core: v1.13.13${NC}"
 echo -e "${GREEN}======================================================${NC}"
 echo -e ""
 echo -e "${YELLOW}Nhấn Enter để tiếp tục cài đặt...${NC}"

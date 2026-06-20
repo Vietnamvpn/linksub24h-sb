@@ -201,7 +201,7 @@ view_and_export_links() {
     else
         for u_name in $all_names; do
             # Định dạng tiêu đề User với màu Tím
-            echo -e "\n${PURPLE}== NGƯỜI DÙNG: ${GREEN}$u_name${PURPLE} ==${NC}"
+            echo -e "\n${PURPLE}NGƯỜI DÙNG: ${GREEN}$u_name${PURPLE}${NC}"
             echo -e "${BLUE}-------------------------------------------------------${NC}"
             
             node_count=1
@@ -227,11 +227,11 @@ view_and_export_links() {
                 
                 # Hiển thị link với màu trắng, rõ ràng
                 if [ "$ntype" == "hysteria2" ]; then
-                    echo -e " ${GREEN}[HY2]${NC}  hysteria2://$upass@$dom:$port?insecure=1&sni=$sni#$remark_tag"
+                    echo -e " hysteria2://$upass@$dom:$port?insecure=1&sni=$sni#$remark_tag"
                 elif [ "$ntype" == "tuic" ]; then
-                    echo -e " ${GREEN}[TUIC]${NC} tuic://$uuid:$upass@$dom:$port?congestion_control=bbr&udp_relay_mode=native&alpn=h3&sni=$sni&allow_insecure=1#$remark_tag"
+                    echo -e " tuic://$uuid:$upass@$dom:$port?congestion_control=bbr&udp_relay_mode=native&alpn=h3&sni=$sni&allow_insecure=1#$remark_tag"
                 elif [ "$ntype" == "vless" ]; then
-                    echo -e " ${GREEN}[VLESS]${NC} vless://$uuid@$dom:$port?security=reality&encryption=none&pbk=$pub_k&headerType=none&fp=chrome&spx=%2F&type=grpc&sni=$sni&serviceName=vless-grpc&sid=0123456789abcdef#$remark_tag"
+                    echo -e " vless://$uuid@$dom:$port?security=reality&encryption=none&pbk=$pub_k&headerType=none&fp=chrome&spx=%2F&type=grpc&sni=$sni&serviceName=vless-grpc&sid=0123456789abcdef#$remark_tag"
                 fi
                 node_count=$((node_count + 1))
             done

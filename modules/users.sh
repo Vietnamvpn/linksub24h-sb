@@ -2,9 +2,9 @@
 
 add_user_advanced() {
     clear
-    echo -e "${BLUE}=========================================${NC}"
-    echo -e "${BLUE}         THÊM NGƯỜI DÙNG MỚI VÀO NODE    ${NC}"
-    echo -e "${BLUE}=========================================${NC}"
+    echo -e ""
+    echo -e "${BLUE}      THÊM NGƯỜI DÙNG MỚI VÀO NODE    ${NC}"
+    echo -e "${BLUE}        ------------------------      ${NC}"
     read -p " Nhập cổng Node muốn thêm, để trống sẽ thêm vào tất cả các Node: " target_port </dev/tty
     
     read -p " Nhập tên User viết liền không dấu: " uname </dev/tty
@@ -108,9 +108,9 @@ add_user_advanced() {
 
 delete_user_menu() {
     clear
-    echo -e "${BLUE}=========================================${NC}"
+    echo -e ""
     echo -e "${BLUE}         XÓA NGƯỜI DÙNG KHỎI NODE        ${NC}"
-    echo -e "${BLUE}=========================================${NC}"
+    echo -e "${BLUE}           ---------------------         ${NC}"
     read -p " Nhập chính xác Tên User cần xóa: " target_del </dev/tty
     
     if [ -z "$target_del" ]; then echo -e "${RED} Tên User không được để trống!${NC}"; sleep 3; return; fi
@@ -141,9 +141,9 @@ delete_user_menu() {
 
 toggle_user_status() {
     clear
-    echo -e "${BLUE}=========================================${NC}"
+    echo -e ""
     echo -e "${BLUE}      TẠM KHÓA / MỞ KHÓA MẠNG NGƯỜI DÙNG ${NC}"
-    echo -e "${BLUE}=========================================${NC}"
+    echo -e "${BLUE}         ------------------------        ${NC}"
     read -p " Nhập chính xác Tên User cần xử lý: " target_user </dev/tty
     
     if [ -z "$target_user" ]; then echo -e "${RED} Tên User không được để trống!${NC}"; sleep 2; return; fi

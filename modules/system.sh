@@ -2,9 +2,9 @@
 
 check_and_update_system() {
     clear
-    echo -e "${BLUE}=================================================${NC}"
+    echo -e ""
     echo -e "${BLUE}       KIỂM TRA HỆ THỐNG & CẬP NHẬT GÓI          ${NC}"
-    echo -e "${BLUE}=================================================${NC}"
+    echo -e "${BLUE}         ---------------------------             ${NC}"
     
     echo -e "${YELLOW}--> Đang kiểm tra thông tin hệ điều hành...${NC}"
     if [ -f /etc/os-release ]; then 
@@ -30,13 +30,13 @@ check_and_update_system() {
     
     clear
     echo -e ""
-    echo -e "${GREEN}    THÔNG TIN HỆ THỐNG VPS CỦA BẠN               ${NC}"
-    echo -e ""
+    echo -e "${GREEN}    THÔNG TIN HỆ THỐNG VPS CỦA BẠN      ${NC}"
+    echo -e "                 ---------------------               "
     echo -e " Hệ điều hành : ${YELLOW}$OS_NAME $OS_VER${NC}"
     echo -e " Chip xử lý    : ${YELLOW}$CPU_CORES Cores CPU${NC}"
     echo -e " Dung lượng RAM: ${YELLOW}$RAM_TOTAL${NC}"
     echo -e " Ổ đĩa lưu trữ : ${YELLOW}Tổng $DISK_TOTAL (Còn trống $DISK_FREE)${NC}"
-    echo -e "${GREEN}=================================================${NC}"
+    echo -e "${GREEN}---------------------------------------------------------${NC}"
     echo -e "--> Chúng ta tiếp tục cài đặt chứ!${NC}"
     echo -e " 1. Đồng ý và tiếp tục cài đặt"
     echo -e " 0. Hủy bỏ"
@@ -51,7 +51,7 @@ check_and_update_system() {
 install_core() {
     echo -e ""
     echo -e "${BLUE}           BẮT ĐẦU CÀI ĐẶT SING-BOX              ${NC}"
-    echo -e ""
+    echo -e "                      ----------------                       "
     
     echo -e "${YELLOW}--> Đang tạo thư mục lưu trữ cấu hình...${NC}"
     mkdir -p $CONFIG_DIR
@@ -115,9 +115,9 @@ EOF
 
 view_vps_status() {
     clear
-    echo -e "${BLUE}=========================================${NC}"
+    echo -e ""
     echo -e "${BLUE}           TRẠNG THÁI HỆ THỐNG VPS       ${NC}"
-    echo -e "${BLUE}=========================================${NC}"
+    echo -e "${BLUE}              -----------------          ${NC}"
     echo -e " Thời gian hoạt động (Uptime): $(uptime -p)"
     echo -e " Mức tải hệ thống (Load Avg) : $(uptime | awk -F'load average:' '{print $2}')"
     echo -e "----------------------------------------"
@@ -135,9 +135,9 @@ view_vps_status() {
 
 create_swap() {
     clear
-    echo -e "${BLUE}=========================================${NC}"
+    echo -e ""
     echo -e "${BLUE}         CẤU HÌNH BỘ NHỚ ẢO (SWAP)        ${NC}"
-    echo -e "${BLUE}=========================================${NC}"
+    echo -e "${BLUE}             -----------------          ${NC}"
     echo -e " Trạng thái SWAP hiện tại hệ thống:"
     swapon --show
     echo -e "----------------------------------------"
@@ -165,9 +165,9 @@ create_swap() {
 
 config_webhook() {
     clear
-    echo -e "${BLUE}=========================================${NC}"
+    echo -e ""
     echo -e "${BLUE}    CẤU HÌNH GỬI LOG LÊN WEB (WEBHOOK)   ${NC}"
-    echo -e "${BLUE}=========================================${NC}"
+    echo -e "${BLUE}        ------------------------         ${NC}"
     CONF_FILE="/usr/local/etc/sing-box/php_url.conf"
     
     if [ -f "$CONF_FILE" ] && [ -n "$(cat "$CONF_FILE")" ]; then
@@ -208,9 +208,9 @@ config_webhook() {
 
 uninstall_system() {
     clear
-    echo -e "${RED}=========================================${NC}"
+    echo -e ""
     echo -e "${RED}   CẢNH BÁO: GỠ CÀI ĐẶT VÀ XÓA TÀN DƯ    ${NC}"
-    echo -e "${RED}=========================================${NC}"
+    echo -e "${RED}        ------------------------         ${NC}"
     echo -e " Thao tác này sẽ xóa KHÔNG THỂ KHÔI PHỤC:"
     echo -e " - Toàn bộ cấu hình Node và Database người dùng."
     echo -e " - File thực thi Core Sing-box."
@@ -253,9 +253,9 @@ uninstall_system() {
 
 update_script() {
     clear
-    echo -e "${BLUE}=========================================${NC}"
+    echo -e ""
     echo -e "${BLUE}       CẬP NHẬT MÃ NGUỒN TỪ GITHUB       ${NC}"
-    echo -e "${BLUE}=========================================${NC}"
+    echo -e "${BLUE}         ------------------------        ${NC}"
     echo -e "--> Đang kéo bản cập nhật mới nhất từ Github..."
     
     cd $APP_DIR

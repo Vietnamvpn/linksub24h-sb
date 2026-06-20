@@ -15,12 +15,18 @@ clear
 echo -e ""
 echo -e "${GREEN}      CHÀO MỪNG BẠN ĐẾN VỚI HỆ THỐNG SING-BOX V3      ${NC}"
 echo -e "${GREEN}          -------------------------------             ${NC}"
-echo -e "${CYAN}  → Tác giả: Vietnamvpn${NC}"
+echo -e "${CYAN}  → Tác giả:${NC} Vietnamvpn"
 echo -e "${CYAN}  → Phiên bản sing-box-core:${NC}${GREEN} v1.13.13${NC} SagerNet"
 echo -e "${GREEN}------------------------------------------------------${NC}"
 echo -e ""
-echo -e "${YELLOW}Nhấn Enter để tiếp tục cài đặt...${NC}"
-read -r
+echo -e "${YELLOW}Nhấn Enter để tiếp tục cài đặt hoặc nhập [0] để HỦY: ${NC}"
+read -r choice </dev/tty
+
+# Kiểm tra nếu người dùng chọn 0 để hủy
+if [ "$choice" = "0" ]; then
+    echo -e "\n${RED}--> Đã hủy quá trình cài đặt hệ thống theo yêu cầu!${NC}\n"
+    exit 0
+fi
 # -----------------------------------------------
 
 clear

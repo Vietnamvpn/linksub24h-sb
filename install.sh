@@ -31,7 +31,7 @@ chmod +x $APP_DIR/modules/*.sh
 ln -sf $APP_DIR/main.sh /usr/local/bin/vvc
 
 echo -e "${GREEN}--> Cài đặt mã nguồn hoàn tất!${NC}"
-sleep 1
+sleep 2
 
 # Bắt đầu chạy file hệ thống chính
 vvc

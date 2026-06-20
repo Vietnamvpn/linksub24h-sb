@@ -37,14 +37,10 @@ check_and_update_system() {
     echo -e " Dung lượng RAM: ${YELLOW}$RAM_TOTAL${NC}"
     echo -e " Ổ đĩa lưu trữ : ${YELLOW}Tổng $DISK_TOTAL (Còn trống $DISK_FREE)${NC}"
     echo -e "${GREEN}---------------------------------------------------------${NC}"
-    echo -e "--> Chúng ta tiếp tục cài đặt chứ!${NC}"
-    echo -e " 1. Đồng ý và tiếp tục cài đặt"
-    echo -e " 0. Hủy bỏ"
-    read -p "Lựa chọn của bạn (0-1): " init_choice </dev/tty
-    if [ "$init_choice" != "1" ]; then 
-        echo -e "${RED} Đã hủy cài đặt.${NC}"
-        exit 0
-    fi
+    
+    echo -e "${YELLOW}--> Cấu hình đáp ứng yêu cầu. Đang tự động chuyển sang cài đặt lõi...${NC}"
+    sleep 2
+    
     install_core
 }
 

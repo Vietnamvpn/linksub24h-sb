@@ -48,6 +48,12 @@ node_wizard_initial() {
         esac
         
         prompt_node_config $proto
+        port_check=$(jq -r ".inbounds[] | select(.listen_port == $RET_PORT)" $CONFIG_FILE 2>/dev/null)
+        if [ ! -z "$port_check" ] && [ "$port_check" != "null" ]; then
+            echo -e "${RED}Lỗi: Cổng $RET_PORT đã được sử dụng! Vui lòng chọn cổng khác.${NC}"
+            sleep 2
+            continue
+        fi
         
         SESSION_TYPES[$node_idx]=$proto
         SESSION_PORTS[$node_idx]=$RET_PORT
@@ -138,6 +144,12 @@ add_single_node_menu() {
     esac
     
     prompt_node_config $proto
+    port_check=$(jq -r ".inbounds[] | select(.listen_port == $RET_PORT)" $CONFIG_FILE 2>/dev/null)
+    if [ ! -z "$port_check" ] && [ "$port_check" != "null" ]; then
+        echo -e "${RED}Lỗi: Cổng $RET_PORT đã được sử dụng bởi một Node khác!${NC}"
+        sleep 2
+        return
+    fi
     
     echo -e "----------------------------------------"
     read -p " Nhập Username dành riêng cho Node mới này: " uname </dev/tty
@@ -265,10 +277,19 @@ update_node_config() {
 
 delete_node() {
     read -p "Nhập số Cổng (Port) của node muốn xóa: " del_port </dev/tty
-    jq "del(.inbounds[] | select(.listen_port == $del_port))" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
+    
+    # Xóa file JSON an toàn
+    jq "del(.inbounds[] | select(.listen_port == $del_port))" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || { echo "Lỗi file cấu hình!"; return; }
+    
+    # Dọn dẹp tường lửa
     ufw delete allow $del_port/udp &>/dev/null
+    ufw delete allow $del_port/tcp &>/dev/null
+    
+    # Dọn dẹp iptables trong rc.local (nếu có)
+    sed -i "/dport $del_port/d" /etc/rc.local
+    
     sqlite3 $DB_FILE "DELETE FROM users WHERE port=$del_port;"
     systemctl restart sing-box
-    echo -e "${GREEN}--> Đã dọn sạch cổng $del_port!${NC}"
+    echo -e "${GREEN}--> Đã xóa hoàn toàn cổng $del_port!${NC}"
     sleep 3
 }

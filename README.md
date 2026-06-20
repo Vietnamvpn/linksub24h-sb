@@ -13,8 +13,8 @@
 
 **Bước 1: Chạy lệnh cài đặt**
 Copy dòng lệnh dưới đây và dán vào Terminal (SSH) của VPS:
-```bash
-curl -sSL https://raw.githubusercontent.com/Vietnamvpn/linksub24h-sb/refs/heads/main/install.sh | bash
+```
+bash <(curl -Ls https://raw.githubusercontent.com/Vietnamvpn/linksub24h-sb/main/install.sh)
 ```
 
 **Bước 2: Xác nhận thông tin hệ thống**

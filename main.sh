@@ -1,7 +1,14 @@
 #!/bin/bash
 
-# Khởi tạo đường dẫn gốc của thư mục app
-export APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# [CẬP NHẬT] Dùng readlink -f để lấy đường dẫn thực, bỏ qua các layer symlink
+export APP_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+
+# Thêm kiểm tra an toàn (Giúp bạn debug nhanh nếu cài đặt lỗi)
+if [ ! -d "$APP_DIR/modules" ]; then
+    echo "Lỗi nghiêm trọng: Không tìm thấy thư mục modules tại $APP_DIR"
+    echo "Vui lòng kiểm tra lại cấu trúc thư mục trên VPS."
+    exit 1
+fi
 
 # Nạp các thư viện và module
 source "$APP_DIR/modules/utils.sh"

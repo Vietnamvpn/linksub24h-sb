@@ -142,7 +142,7 @@ delete_user_menu() {
 toggle_user_status() {
     clear
     echo -e ""
-    echo -e "${BLUE}      TẠM KHÓA / MỞ KHÓA MẠNG NGƯỜI DÙNG ${NC}"
+    echo -e "${BLUE}    TẠM KHÓA / MỞ KHÓA MẠNG NGƯỜI DÙNG   ${NC}"
     echo -e "${BLUE}         ------------------------        ${NC}"
     read -p " Nhập chính xác Tên User cần xử lý: " target_user </dev/tty
     

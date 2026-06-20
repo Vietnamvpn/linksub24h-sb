@@ -6,7 +6,7 @@ YELLOW='\033[0;33m'
 NC='\033[0m'
 
 # Thay đường dẫn này bằng Link Github chứa thư mục source của bạn
-REPO_URL="https://github.com/Vietnamvpn/singbox-ls.git"
+REPO_URL="https://github.com/Vietnamvpn/linksub24h-sb.git"
 APP_DIR="/usr/local/singbox-manager"
 
 clear

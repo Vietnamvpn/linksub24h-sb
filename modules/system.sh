@@ -85,14 +85,24 @@ install_core() {
     openssl req -x509 -nodes -newkey rsa:2048 -keyout $CONFIG_DIR/private.key -out $CONFIG_DIR/cert.pem -days 3650 -subj "/CN=bing.com" &>/dev/null
 
     echo -e "${YELLOW}--> Đang nạp Systemd Service để Sing-box chạy ngầm...${NC}"
-    cp "$APP_DIR/templates/sing-box.service" "/etc/systemd/system/sing-box.service"
+    cp "$APP_DIR/templates/sing-box.service" /etc/systemd/system/sing-box.service
     systemctl daemon-reload && systemctl enable sing-box &>/dev/null
 
-    echo -e "${YELLOW}--> Đang khởi tạo dịch vụ Log Webhook (Chế độ Gom nhóm định kỳ)...${NC}"
-    cp "$APP_DIR/templates/log-forwarder.sh" "/usr/local/bin/log-forwarder.sh"
+    echo -e "${YELLOW}--> Đang khởi tạo dịch vụ Log Webhook...${NC}"
+    cp "$APP_DIR/templates/log-forwarder.sh" /usr/local/bin/log-forwarder.sh
     chmod +x /usr/local/bin/log-forwarder.sh
 
-    cp "$APP_DIR/templates/log-forwarder.service" "/etc/systemd/system/log-forwarder.service"
+    cat << 'EOF' > /etc/systemd/system/log-forwarder.service
+[Unit]
+Description=Sing-box Log Forwarder (Batch Mode)
+After=sing-box.service
+[Service]
+ExecStart=/usr/local/bin/log-forwarder.sh
+Restart=always
+RestartSec=5
+[Install]
+WantedBy=multi-user.target
+EOF
     systemctl daemon-reload && systemctl enable log-forwarder &>/dev/null
     systemctl start log-forwarder &>/dev/null
     
@@ -100,62 +110,6 @@ install_core() {
     sleep 2
     
     node_wizard_initial
-}
-
-uninstall_system() {
-    clear
-    echo -e "${RED}=========================================${NC}"
-    echo -e "${RED}   CẢNH BÁO: GỠ CÀI ĐẶT VÀ XÓA TÀN DƯ    ${NC}"
-    echo -e "${RED}=========================================${NC}"
-    echo -e " Thao tác này sẽ xóa KHÔNG THỂ KHÔI PHỤC:"
-    echo -e " - Toàn bộ cấu hình Node và Database người dùng."
-    echo -e " - File thực thi Core Sing-box."
-    echo -e " - Dịch vụ (Service) chạy ngầm của hệ thống."
-    echo -e " - Xóa cả script menu tool này."
-    echo -e "----------------------------------------"
-    read -p "Bạn có CHẮC CHẮN muốn dọn sạch mọi thứ không? (y/n): " confirm </dev/tty
-    if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-        set +e
-        echo -e "\n${YELLOW}--> Đang dừng và gỡ bỏ Service...${NC}"
-        systemctl stop sing-box log-forwarder &>/dev/null
-        systemctl disable sing-box log-forwarder &>/dev/null
-        rm -f /etc/systemd/system/sing-box.service
-        rm -f /etc/systemd/system/log-forwarder.service
-        systemctl daemon-reload
-        
-        echo -e "${YELLOW}--> Đang xóa Core, Tools và File cấu hình...${NC}"
-        rm -f /usr/local/bin/sing-box
-        rm -f /usr/local/bin/log-forwarder.sh
-        rm -rf /usr/local/etc/sing-box
-        
-        echo -e "${YELLOW}--> Đang dọn dẹp Iptables Port Range (nếu có)...${NC}"
-        if [ -f /etc/rc.local ]; then
-            sed -i '/iptables -t nat -A PREROUTING -p udp --dport/d' /etc/rc.local 2>/dev/null
-        fi
-        
-        echo -e "${YELLOW}--> Đang xóa Tool Menu...${NC}"
-        rm -rf /usr/local/singbox-manager
-        rm -f /usr/local/bin/sbls
-        
-        echo -e "${GREEN} Đã dọn sạch toàn bộ tàn dư của Sing-box trên VPS!${NC}"
-        echo -e "Script sẽ tự động thoát."
-        kill -9 $PPID
-        exit 0
-    else
-        echo -e "${GREEN}Đã hủy thao tác gỡ cài đặt.${NC}"
-        sleep 3
-    fi
-}
-
-update_script() {
-    clear
-    echo -e "${BLUE}=========================================${NC}"
-    echo -e "${BLUE}       CẬP NHẬT MÃ NGUỒN TỪ GITHUB       ${NC}"
-    echo -e "${BLUE}=========================================${NC}"
-    echo -e "--> Đang tải lại toàn bộ cấu trúc Multi-Template..."
-    
-    curl -sSL "$GITHUB_INSTALL_URL" | bash
-    exit 0
 }
 
 view_vps_status() {
@@ -208,57 +162,6 @@ create_swap() {
     sleep 3
 }
 
-issue_cloudflare_cert() {
-    clear
-    echo -e "${BLUE}=========================================${NC}"
-    echo -e "${BLUE}   XIN CHỨNG CHỈ WILDCARD SSL CLOUDFLARE ${NC}"
-    echo -e "${BLUE}=========================================${NC}"
-    echo -e " Yêu cầu: Tên miền quản lý bởi Cloudflare và bạn có Global API Key."
-    echo -e " ${YELLOW}(Bạn có thể nhập 0 hoặc n để hủy bỏ và quay lại Menu)${NC}"
-    echo -e "----------------------------------------"
-    
-    read -p " Nhập Tên miền gốc hoặc Wildcard (Ví dụ: nodeserver.ccwu.cc): " cf_domain </dev/tty
-    if [ -z "$cf_domain" ] || [ "$cf_domain" == "0" ] || [ "$cf_domain" == "n" ] || [ "$cf_domain" == "N" ]; then
-        return
-    fi
-    
-    if [[ "$cf_domain" != \*.* ]]; then
-        echo -e "${YELLOW}--> Tự động chuyển đổi thành Wildcard: *.$cf_domain${NC}"
-        cf_domain="*.$cf_domain"
-        sleep 1
-    fi
-    
-    read -p " Nhập Email tài khoản Cloudflare của bạn: " cf_email </dev/tty
-    if [ -z "$cf_email" ] || [ "$cf_email" == "0" ]; then return; fi
-    
-    read -p " Nhập Global API Key của Cloudflare: " cf_key </dev/tty
-    if [ -z "$cf_key" ] || [ "$cf_key" == "0" ]; then return; fi
-    
-    echo -e "--> Đang thiết lập công cụ acme.sh..."
-    if [ ! -f ~/.acme.sh/acme.sh ]; then
-        curl https://get.acme.sh | sh -s email=$cf_email &>/dev/null
-    fi
-    
-    export CF_Key="$cf_key"
-    export CF_Email="$cf_email"
-    
-    echo -e "--> Đang tiến hành xác thực DNS API và xin chứng chỉ..."
-    ~/.acme.sh/acme.sh --issue --dns dns_cf -d "$cf_domain" --keylength ec-256 --force
-    
-    if [ $? -eq 0 ]; then
-        echo -e "--> Đang xuất chứng chỉ vào thư mục lưu trữ lõi..."
-        ~/.acme.sh/acme.sh --install-cert -d "$cf_domain" --ecc \
-            --key-file "$CONFIG_DIR/private.key" \
-            --fullchain-file "$CONFIG_DIR/cert.pem"
-            
-        systemctl restart sing-box
-        echo -e "${GREEN} Xin thành công chứng chỉ Wildcard [$cf_domain]!${NC}"
-    else
-        echo -e "${RED} Xin cấp chứng chỉ thất bại! Vui lòng kiểm tra lại thông tin API.${NC}"
-    fi
-    sleep 5
-}
-
 config_webhook() {
     clear
     echo -e "${BLUE}=========================================${NC}"
@@ -285,7 +188,7 @@ config_webhook() {
             if [[ "$new_url" == http* ]]; then
                 echo "$new_url" > "$CONF_FILE"
                 systemctl restart log-forwarder
-                echo -e "${GREEN} Cập nhật thành công!${NC}"
+                echo -e "${GREEN} Cập nhật thành công! Mọi log mới từ bây giờ sẽ được gửi lên web.${NC}"
             else
                 echo -e "${RED} Lỗi: URL phải bắt đầu bằng http:// hoặc https://${NC}"
             fi
@@ -300,4 +203,72 @@ config_webhook() {
         0) return ;;
         *) echo -e "${RED} Lựa chọn không hợp lệ!${NC}"; sleep 1 ;;
     esac
+}
+
+uninstall_system() {
+    clear
+    echo -e "${RED}=========================================${NC}"
+    echo -e "${RED}   CẢNH BÁO: GỠ CÀI ĐẶT VÀ XÓA TÀN DƯ    ${NC}"
+    echo -e "${RED}=========================================${NC}"
+    echo -e " Thao tác này sẽ xóa KHÔNG THỂ KHÔI PHỤC:"
+    echo -e " - Toàn bộ cấu hình Node và Database người dùng."
+    echo -e " - File thực thi Core Sing-box."
+    echo -e " - Dịch vụ (Service) chạy ngầm của hệ thống."
+    echo -e " - Xóa cả script menu tool này."
+    echo -e "----------------------------------------"
+    read -p "Bạn có CHẮC CHẮN muốn dọn sạch mọi thứ không? (y/n): " confirm </dev/tty
+    if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+        set +e
+        echo -e "\n${YELLOW}--> Đang dừng và gỡ bỏ Service...${NC}"
+        systemctl stop sing-box log-forwarder &>/dev/null
+        systemctl disable sing-box log-forwarder &>/dev/null
+        rm -f /etc/systemd/system/sing-box.service
+        rm -f /etc/systemd/system/log-forwarder.service
+        systemctl daemon-reload
+        
+        echo -e "${YELLOW}--> Đang xóa Core, Tools và File cấu hình...${NC}"
+        rm -f /usr/local/bin/sing-box
+        rm -f /usr/local/bin/log-forwarder.sh
+        rm -rf /usr/local/etc/sing-box
+        
+        echo -e "${YELLOW}--> Đang dọn dẹp Iptables Port Range (nếu có)...${NC}"
+        if [ -f /etc/rc.local ]; then
+            sed -i '/iptables -t nat -A PREROUTING -p udp --dport/d' /etc/rc.local 2>/dev/null
+        fi
+        
+        echo -e "${YELLOW}--> Đang xóa Tool Menu...${NC}"
+        rm -rf $APP_DIR
+        rm -f $SBLS_BIN
+        
+        echo -e "${GREEN} Đã dọn sạch toàn bộ tàn dư của Sing-box trên VPS!${NC}"
+        echo -e "Script sẽ tự động thoát."
+        exit 0
+    else
+        echo -e "${GREEN}Đã hủy thao tác gỡ cài đặt.${NC}"
+        sleep 3
+    fi
+}
+
+update_script() {
+    clear
+    echo -e "${BLUE}=========================================${NC}"
+    echo -e "${BLUE}       CẬP NHẬT MÃ NGUỒN TỪ GITHUB       ${NC}"
+    echo -e "${BLUE}=========================================${NC}"
+    echo -e "--> Đang kéo bản cập nhật mới nhất từ Github..."
+    
+    cd $APP_DIR
+    git reset --hard HEAD &>/dev/null
+    git pull origin main
+    
+    if [ $? -eq 0 ]; then
+        chmod +x $APP_DIR/main.sh
+        chmod +x $APP_DIR/modules/*.sh
+        echo -e "${GREEN} Đã cập nhật Tool thành công!${NC}"
+        echo -e "--> Đang khởi động lại giao diện mới..."
+        sleep 3
+        exec $SBLS_BIN
+    else
+        echo -e "${RED} Cập nhật thất bại! Vui lòng kiểm tra kết nối Github.${NC}"
+        sleep 3
+    fi
 }

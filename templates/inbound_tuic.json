@@ -1,0 +1,20 @@
+{
+  "type": "tuic",
+  "tag": "tuic-PORT",
+  "listen": "::",
+  "listen_port": "PORT",
+  "users": [
+    {
+      "uuid": "UUID",
+      "password": "PASSWORD"
+    }
+  ],
+  "congestion_control": "bbr",
+  "tls": {
+    "enabled": true,
+    "certificate_path": "/usr/local/etc/sing-box/cert.pem",
+    "key_path": "/usr/local/etc/sing-box/private.key",
+    "alpn": ["h3"],
+    "server_name": "SNI"
+  }
+}

@@ -1,13 +1,17 @@
 #!/bin/bash
 
-# Khai báo thư mục làm việc tuyệt đối
-export APP_DIR="/usr/local/singbox-manager"
+# Khởi tạo đường dẫn gốc của thư mục app
+export APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Nạp các Module
+# Nạp các thư viện và module
 source "$APP_DIR/modules/utils.sh"
 source "$APP_DIR/modules/system.sh"
 source "$APP_DIR/modules/nodes.sh"
 source "$APP_DIR/modules/users.sh"
+
+# Bắt lỗi toàn cục
+set -e
+trap 'catch_error $LINENO' ERR
 
 main_menu() {
     clear
@@ -27,6 +31,7 @@ main_menu() {
     echo -e " 9. Tạo bộ nhớ ảo (SWAP)                   |  0. Thoát hệ thống"
     echo -e "${BLUE}===============================================================================${NC}"
     
+    # Lấy trạng thái hiện tại của Sing-box
     if systemctl is-active --quiet sing-box; then
         echo -e "Trạng thái: ${GREEN}Đang chạy (Active)${NC}"
     else
@@ -37,31 +42,19 @@ main_menu() {
     read -p "Nhập lựa chọn: " m_choice </dev/tty
     
     case $m_choice in
-        1) list_links ;;
+        1) view_and_export_links ;;
         2) journalctl -u sing-box --no-hostname -n 50 -f ;;
         3) view_vps_status ;;
         4) add_single_node_menu ;;
         5) delete_node ;;
         6) update_node_config ;;
         7) add_user_advanced ;;
-        8) delete_user_from_node ;;
+        8) delete_user_menu ;;
         9) create_swap ;;
         10) issue_cloudflare_cert ;;
-        11) 
-            systemctl start sing-box
-            echo -e "${GREEN} Đã BẬT dịch vụ Sing-box!${NC}"
-            sleep 3 
-            ;;
-        12) 
-            systemctl stop sing-box
-            echo -e "${YELLOW} Đã DỪNG dịch vụ Sing-box!${NC}"
-            sleep 3 
-            ;;
-        13) 
-            systemctl restart sing-box
-            echo -e "${GREEN} Đã KHỞI ĐỘNG LẠI dịch vụ Sing-box thành công!${NC}"
-            sleep 3 
-            ;;
+        11) systemctl start sing-box; echo -e "${GREEN} Đã BẬT dịch vụ Sing-box!${NC}"; sleep 3 ;;
+        12) systemctl stop sing-box; echo -e "${YELLOW} Đã DỪNG dịch vụ Sing-box!${NC}"; sleep 3 ;;
+        13) systemctl restart sing-box; echo -e "${GREEN} Đã KHỞI ĐỘNG LẠI dịch vụ Sing-box thành công!${NC}"; sleep 3 ;;
         14) uninstall_system ;;
         15) update_script ;;
         16) toggle_user_status ;;
@@ -72,8 +65,8 @@ main_menu() {
     main_menu
 }
 
-# Điểm neo khởi chạy
-if [ -f "$APP_DIR/main.sh" ]; then 
+# Khởi chạy logic ban đầu
+if [ -f "$CONFIG_FILE" ]; then 
     main_menu
 else 
     check_and_update_system

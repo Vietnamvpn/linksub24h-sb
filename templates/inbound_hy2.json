@@ -1,0 +1,18 @@
+{
+  "type": "hysteria2",
+  "tag": "hy2-PORT",
+  "listen": "::",
+  "listen_port": "PORT",
+  "users": [
+    {
+      "name": "USERNAME",
+      "password": "PASSWORD"
+    }
+  ],
+  "tls": {
+    "enabled": true,
+    "certificate_path": "/usr/local/etc/sing-box/cert.pem",
+    "key_path": "/usr/local/etc/sing-box/private.key",
+    "server_name": "SNI"
+  }
+}

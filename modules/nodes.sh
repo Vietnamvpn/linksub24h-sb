@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# --- FORM NHẬP LIỆU THÔNG MINH THEO GIAO THỨC ---
 prompt_node_config() {
     local proto=$1
     read -p " Nhập Cổng (Port) chính cho Node này: " RET_PORT </dev/tty
@@ -11,15 +12,16 @@ prompt_node_config() {
     RET_RANGE=""
     
     if [ "$proto" == "hysteria2" ]; then
-        read -p " Nhập SNI chứng chỉ (Bỏ trống lấy ngẫu nhiên): " RET_SNI </dev/tty
+        read -p " Nhập SNI chứng chỉ (Bỏ trống hệ thống lấy ngẫu nhiên): " RET_SNI </dev/tty
         read -p " Nhập Port Range (Ví dụ: 2345:2347) (Bỏ trống nếu không dùng): " RET_RANGE </dev/tty
     elif [ "$proto" == "tuic" ]; then
-        read -p " Nhập SNI chứng chỉ (Bỏ trống lấy ngẫu nhiên): " RET_SNI </dev/tty
+        read -p " Nhập SNI chứng chỉ (Bỏ trống hệ thống lấy ngẫu nhiên): " RET_SNI </dev/tty
     elif [ "$proto" == "vless" ]; then
         read -p " Nhập SNI giả lập Reality (Bắt buộc, bỏ trống mặc định www.microsoft.com): " RET_SNI </dev/tty
         if [ -z "$RET_SNI" ]; then RET_SNI="www.microsoft.com"; fi
     fi
 
+    # Tự sinh SNI ngẫu nhiên cho Hy2 và TUIC nếu người dùng bỏ trống
     if [ -z "$RET_SNI" ] && [ "$proto" != "vless" ]; then
         arr_sni=("www.google.com" "www.yahoo.com" "www.apple.com" "www.cloudflare.com")
         RET_SNI=${arr_sni[$RANDOM % ${#arr_sni[@]}]}
@@ -48,16 +50,6 @@ node_wizard_initial() {
         esac
         
         prompt_node_config $proto
-        if [ ! -f "$CONFIG_FILE" ]; then
-            mkdir -p "$(dirname "$CONFIG_FILE")"
-            echo '{"inbounds": [], "outbounds": []}' > "$CONFIG_FILE"
-        fi
-        port_check=$(jq -r ".inbounds[] | select(.listen_port == $RET_PORT)" $CONFIG_FILE 2>/dev/null)
-        if [ ! -z "$port_check" ] && [ "$port_check" != "null" ]; then
-            echo -e "${RED}Lỗi: Cổng $RET_PORT đã được sử dụng! Vui lòng chọn cổng khác.${NC}"
-            sleep 2
-            continue
-        fi
         
         SESSION_TYPES[$node_idx]=$proto
         SESSION_PORTS[$node_idx]=$RET_PORT
@@ -104,11 +96,11 @@ node_wizard_initial() {
         safe_dom=$(echo "$dom" | sed "s/'/''/g")
         
         if [ "$type" == "hysteria2" ]; then
-            jq ".inbounds += [{\"type\": \"hysteria2\", \"tag\": \"hy2-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": [{\"name\": \"$common_name\", \"password\": \"$common_pass\"}], \"tls\": {\"enabled\": true, \"certificate_path\": \"$CONFIG_DIR/cert.pem\", \"key_path\": \"$CONFIG_DIR/private.key\", \"server_name\": \"$sni\"}}]" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
+            jq ".inbounds += [{\"type\": \"hysteria2\", \"tag\": \"hy2-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": [{\"name\": \"$common_name\", \"password\": \"$common_pass\"}], \"tls\": {\"enabled\": true, \"certificate_path\": \"$CONFIG_DIR/cert.pem\", \"key_path\": \"$CONFIG_DIR/private.key\", \"server_name\": \"$sni\"}}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
             sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('hysteria2', $port, '$safe_dom', '$safe_common_name::$safe_common_pass::');"
             
         elif [ "$type" == "tuic" ]; then
-            jq ".inbounds += [{\"type\": \"tuic\", \"tag\": \"tuic-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": [{\"uuid\": \"$common_uuid\", \"password\": \"$common_pass\"}], \"congestion_control\": \"bbr\", \"tls\": {\"enabled\": true, \"certificate_path\": \"$CONFIG_DIR/cert.pem\", \"key_path\": \"$CONFIG_DIR/private.key\", \"alpn\": [\"h3\"], \"server_name\": \"$sni\"}}]" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
+            jq ".inbounds += [{\"type\": \"tuic\", \"tag\": \"tuic-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": [{\"uuid\": \"$common_uuid\", \"password\": \"$common_pass\"}], \"congestion_control\": \"bbr\", \"tls\": {\"enabled\": true, \"certificate_path\": \"$CONFIG_DIR/cert.pem\", \"key_path\": \"$CONFIG_DIR/private.key\", \"alpn\": [\"h3\"], \"server_name\": \"$sni\"}}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
             sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('tuic', $port, '$safe_dom', '$safe_common_name:$common_uuid:$safe_common_pass::');"
             
         elif [ "$type" == "vless" ]; then
@@ -121,7 +113,7 @@ node_wizard_initial() {
             fi
             rm -f /tmp/kp.txt
             
-            jq ".inbounds += [{\"type\": \"vless\", \"tag\": \"vless-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": [{\"uuid\": \"$common_uuid\", \"name\": \"$common_name\"}], \"tls\": {\"enabled\": true, \"server_name\": \"$sni\", \"reality\": {\"enabled\": true, \"handshake\": {\"server\": \"$sni\", \"server_port\": 443}, \"private_key\": \"$priv_key\", \"short_id\": [\"0123456789abcdef\"]}}, \"transport\": {\"type\": \"grpc\", \"service_name\": \"vless-grpc\"}}]" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
+            jq ".inbounds += [{\"type\": \"vless\", \"tag\": \"vless-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": [{\"uuid\": \"$common_uuid\", \"name\": \"$common_name\"}], \"tls\": {\"enabled\": true, \"server_name\": \"$sni\", \"reality\": {\"enabled\": true, \"handshake\": {\"server\": \"$sni\", \"server_port\": 443}, \"private_key\": \"$priv_key\", \"short_id\": [\"0123456789abcdef\"]}}, \"transport\": {\"type\": \"grpc\", \"service_name\": \"vless-grpc\"}}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
             sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('vless', $port, '$safe_dom', '$safe_common_name:$common_uuid::$pub_key:$sni');"
         fi
     done
@@ -148,16 +140,6 @@ add_single_node_menu() {
     esac
     
     prompt_node_config $proto
-    if [ ! -f "$CONFIG_FILE" ]; then
-        mkdir -p "$(dirname "$CONFIG_FILE")"
-        echo '{"inbounds": [], "outbounds": []}' > "$CONFIG_FILE"
-    fi
-    port_check=$(jq -r ".inbounds[] | select(.listen_port == $RET_PORT)" $CONFIG_FILE 2>/dev/null)
-    if [ ! -z "$port_check" ] && [ "$port_check" != "null" ]; then
-        echo -e "${RED}Lỗi: Cổng $RET_PORT đã được sử dụng bởi một Node khác!${NC}"
-        sleep 2
-        return
-    fi
     
     echo -e "----------------------------------------"
     read -p " Nhập Username dành riêng cho Node mới này: " uname </dev/tty
@@ -187,23 +169,37 @@ add_single_node_menu() {
     fi
     
     if [ "$proto" == "hysteria2" ]; then
-        jq ".inbounds += [{\"type\": \"hysteria2\", \"tag\": \"hy2-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": [{\"name\": \"$uname\", \"password\": \"$upass\"}], \"tls\": {\"enabled\": true, \"certificate_path\": \"$CONFIG_DIR/cert.pem\", \"key_path\": \"$CONFIG_DIR/private.key\", \"server_name\": \"$sni\"}}]" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
+        jq ".inbounds += [{\"type\": \"hysteria2\", \"tag\": \"hy2-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": [{\"name\": \"$uname\", \"password\": \"$upass\"}], \"tls\": {\"enabled\": true, \"certificate_path\": \"$CONFIG_DIR/cert.pem\", \"key_path\": \"$CONFIG_DIR/private.key\", \"server_name\": \"$sni\"}}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
         sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('hysteria2', $port, '$safe_dom', '$safe_uname::$safe_upass::');"
     elif [ "$proto" == "tuic" ]; then
-        jq ".inbounds += [{\"type\": \"tuic\", \"tag\": \"tuic-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": [{\"uuid\": \"$uuid_gen\", \"password\": \"$upass\"}], \"congestion_control\": \"bbr\", \"tls\": {\"enabled\": true, \"certificate_path\": \"$CONFIG_DIR/cert.pem\", \"key_path\": \"$CONFIG_DIR/private.key\", \"alpn\": [\"h3\"], \"server_name\": \"$sni\"}}]" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
+        jq ".inbounds += [{\"type\": \"tuic\", \"tag\": \"tuic-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": [{\"uuid\": \"$uuid_gen\", \"password\": \"$upass\"}], \"congestion_control\": \"bbr\", \"tls\": {\"enabled\": true, \"certificate_path\": \"$CONFIG_DIR/cert.pem\", \"key_path\": \"$CONFIG_DIR/private.key\", \"alpn\": [\"h3\"], \"server_name\": \"$sni\"}}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
         sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('tuic', $port, '$safe_dom', '$safe_uname:$uuid_gen:$safe_upass::');"
     elif [ "$proto" == "vless" ]; then
         /usr/local/bin/sing-box generate reality-keypair > /tmp/kp.txt 2>/dev/null || true
         priv_key=$(awk '/[Pp]rivate/ {print $NF}' /tmp/kp.txt | tr -d '\r')
         pub_key=$(awk '/[Pp]ublic/ {print $NF}' /tmp/kp.txt | tr -d '\r')
-        if [ -z "$priv_key" ]; then priv_key="mK3_Ag3X_Placeholder"; pub_key="pub_placeholder"; fi
+        if [ -z "$priv_key" ]; then 
+            priv_key="mK3_Ag3X_Placeholder_Must_Be_43_Chars_Long"
+            pub_key="pub_placeholder"
+        fi
         rm -f /tmp/kp.txt
-        jq ".inbounds += [{\"type\": \"vless\", \"tag\": \"vless-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": [{\"uuid\": \"$uuid_gen\", \"name\": \"$uname\"}], \"tls\": {\"enabled\": true, \"server_name\": \"$sni\", \"reality\": {\"enabled\": true, \"handshake\": {\"server\": \"$sni\", \"server_port\": 443}, \"private_key\": \"$priv_key\", \"short_id\": [\"0123456789abcdef\"]}}, \"transport\": {\"type\": \"grpc\", \"service_name\": \"vless-grpc\"}}]" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
+        jq ".inbounds += [{\"type\": \"vless\", \"tag\": \"vless-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": [{\"uuid\": \"$uuid_gen\", \"name\": \"$uname\"}], \"tls\": {\"enabled\": true, \"server_name\": \"$sni\", \"reality\": {\"enabled\": true, \"handshake\": {\"server\": \"$sni\", \"server_port\": 443}, \"private_key\": \"$priv_key\", \"short_id\": [\"0123456789abcdef\"]}}, \"transport\": {\"type\": \"grpc\", \"service_name\": \"vless-grpc\"}}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
         sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('vless', $port, '$safe_dom', '$safe_uname:$uuid_gen::$pub_key:$sni');"
     fi
     
     systemctl restart sing-box
-    echo -e "${GREEN} Thêm Node độc lập hoàn tất!${NC}"
+    echo -e "${GREEN} Thêm Node độc lập hoàn tất! Không ảnh hưởng tới các Node cũ.${NC}"
+    sleep 3
+}
+
+delete_node() {
+    read -p "Nhập số Cổng (Port) của node muốn xóa: " del_port </dev/tty
+    jq "del(.inbounds[] | select(.listen_port == $del_port))" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
+    ufw delete allow $del_port/udp &>/dev/null
+    ufw delete allow $del_port/tcp &>/dev/null
+    sqlite3 $DB_FILE "DELETE FROM users WHERE port=$del_port;"
+    systemctl restart sing-box
+    echo -e "${GREEN}--> Đã dọn sạch cổng $del_port!${NC}"
     sleep 3
 }
 
@@ -212,61 +208,97 @@ update_node_config() {
     echo -e "${BLUE}=========================================${NC}"
     echo -e "${BLUE}     CẬP NHẬT CẤU HÌNH NODE PROXY        ${NC}"
     echo -e "${BLUE}=========================================${NC}"
+    echo -e " ${YELLOW}(Bạn có thể nhập 0 hoặc n để hủy bỏ và quay lại Menu)${NC}"
+    echo -e "----------------------------------------"
+    
     read -p " Nhập cổng (Port) hiện tại của Node cần sửa: " old_port </dev/tty
-    if [ -z "$old_port" ] || [ "$old_port" == "0" ] || [ "$old_port" == "n" ]; then return; fi
+    if [ -z "$old_port" ] || [ "$old_port" == "0" ] || [ "$old_port" == "n" ] || [ "$old_port" == "N" ]; then
+        echo -e "${YELLOW} Đã hủy thao tác cập nhật Node.${NC}"
+        sleep 2
+        return
+    fi
     
     if [[ ! "$old_port" =~ ^[0-9]+$ ]]; then
-        echo -e "${RED} Lỗi: Cổng phải là một số nguyên hợp lệ!${NC}"; sleep 3; return
+        echo -e "${RED} Lỗi: Cổng phải là một số nguyên hợp lệ!${NC}"
+        sleep 3
+        return
     fi
 
     node_exists=$(jq -r ".inbounds[] | select(.listen_port == $old_port) | .listen_port" $CONFIG_FILE 2>/dev/null)
     if [ -z "$node_exists" ] || [ "$node_exists" == "null" ]; then
-        echo -e "${RED} Lỗi: Không tìm thấy Node ở cổng $old_port!${NC}"; sleep 3; return
+        echo -e "${RED} Lỗi: Không tìm thấy Node nào đang chạy ở cổng $old_port!${NC}"
+        sleep 3
+        return
     fi
     
     current_tag=$(jq -r ".inbounds[] | select(.listen_port == $old_port) | .tag" $CONFIG_FILE 2>/dev/null)
     current_sni=$(jq -r ".inbounds[] | select(.listen_port == $old_port) | .tls.server_name" $CONFIG_FILE 2>/dev/null)
     
-    echo -e " Tag hiện tại: ${GREEN}$current_tag${NC}"
-    echo -e " SNI hiện tại: ${GREEN}$current_sni${NC}"
+    echo -e " Node đang chọn có Tag hiện tại là: ${GREEN}$current_tag${NC}"
+    echo -e " SNI hiện tại đang sử dụng là: ${GREEN}$current_sni${NC}"
     echo -e "----------------------------------------"
-    echo " 1. Đổi Cổng (Port)"
-    echo " 2. Đổi Domain/IP kết nối"
-    echo " 3. Đổi Tên nhận diện (Tag)"
-    echo " 4. Đổi SNI (server_name)"
+    echo " 1. Đổi Cổng (Port) mới cho Node này"
+    echo " 2. Đổi Domain/IP kết nối mới cho Node này"
+    echo " 3. Đổi Tên nhận diện (Tag) mới cho Node này"
+    echo " 4. Đổi SNI (server_name) mới cho Node này"
     read -p " Chọn mục cần cập nhật (1-4): " update_choice </dev/tty
     
+    if [ -z "$update_choice" ] || [ "$update_choice" == "0" ] || [ "$update_choice" == "n" ] || [ "$update_choice" == "N" ]; then
+        return
+    fi
+    
     if [ "$update_choice" == "1" ]; then
-        read -p " Nhập Cổng (Port) MỚI: " new_port </dev/tty
-        if [[ ! "$new_port" =~ ^[0-9]+$ ]]; then return; fi
+        read -p " Nhập Cổng (Port) MỚI muốn thay đổi: " new_port </dev/tty
+        if [ -z "$new_port" ] || [ "$new_port" == "0" ] || [ "$new_port" == "n" ] || [ "$new_port" == "N" ]; then return; fi
+        
+        port_check=$(jq -r ".inbounds[] | select(.listen_port == $new_port) | .listen_port" $CONFIG_FILE 2>/dev/null)
+        if [ -n "$port_check" ] && [ "$port_check" != "null" ]; then
+            echo -e "${RED} Lỗi: Cổng MỚI $new_port đã bị chiếm dụng bởi Node khác!${NC}"
+            sleep 3; return
+        fi
         
         node_type=$(jq -r ".inbounds[] | select(.listen_port == $old_port) | .type" $CONFIG_FILE)
         new_tag="${node_type}-$new_port"
-        jq "(.inbounds[] | select(.listen_port == $old_port)) |= (.listen_port = $new_port | .tag = \"$new_tag\")" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || { echo "Lỗi cập nhật JSON"; rm -f tmp.json; return; }
+        jq "(.inbounds[] | select(.listen_port == $old_port)) |= (.listen_port = $new_port | .tag = \"$new_tag\")" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
         sqlite3 $DB_FILE "UPDATE users SET port=$new_port WHERE port=$old_port;"
         
-        ufw allow $new_port/tcp &>/dev/null; ufw allow $new_port/udp &>/dev/null
-        ufw delete allow $old_port/tcp &>/dev/null; ufw delete allow $old_port/udp &>/dev/null
+        ufw allow $new_port/tcp &>/dev/null
+        ufw allow $new_port/udp &>/dev/null
+        ufw delete allow $old_port/tcp &>/dev/null
+        ufw delete allow $old_port/udp &>/dev/null
         ufw reload &>/dev/null
         
+        systemctl restart sing-box
+        echo -e "${GREEN} Cập nhật chuyển đổi cổng thành công!${NC}"
+        sleep 3
+        
     elif [ "$update_choice" == "2" ]; then
-        read -p " Nhập Domain MỚI: " new_dom </dev/tty
+        read -p " Nhập Domain hoặc IP kết nối MỚI: " new_dom </dev/tty
         safe_new_dom=$(echo "$new_dom" | sed "s/'/''/g")
         sqlite3 $DB_FILE "UPDATE users SET domain='$safe_new_dom' WHERE port=$old_port;"
+        echo -e "${GREEN} Cập nhật Domain kết nối thành công!${NC}"
+        sleep 3
         
     elif [ "$update_choice" == "3" ]; then
-        read -p " Nhập Tag MỚI: " new_tag </dev/tty
+        read -p " Nhập Tên nhận diện (Tag) MỚI cho Node này: " new_tag </dev/tty
         safe_new_tag=$(echo "$new_tag" | sed 's/"/\\"/g')
-        jq "(.inbounds[] | select(.listen_port == $old_port)).tag = \"$safe_new_tag\"" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
+        tag_check=$(jq -r ".inbounds[] | select(.tag == \"$safe_new_tag\") | .tag" $CONFIG_FILE 2>/dev/null)
+        if [ -n "$tag_check" ] && [ "$tag_check" != "null" ]; then
+            echo -e "${RED} Lỗi: Tên Tag MỚI [$new_tag] đã tồn tại!${NC}"; sleep 3; return
+        fi
+        
+        jq "(.inbounds[] | select(.listen_port == $old_port)).tag = \"$safe_new_tag\"" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
+        systemctl restart sing-box
+        echo -e "${GREEN} Cập nhật Tên Tag thành công!${NC}"
+        sleep 3
         
     elif [ "$update_choice" == "4" ]; then
-        read -p " Nhập SNI MỚI: " new_sni </dev/tty
+        read -p " Nhập SNI (server_name) MỚI cho Node này: " new_sni </dev/tty
         safe_new_sni=$(echo "$new_sni" | sed 's/"/\\"/g')
         node_type=$(jq -r ".inbounds[] | select(.listen_port == $old_port) | .type" $CONFIG_FILE)
         
         if [ "$node_type" == "vless" ]; then
-            jq "(.inbounds[] | select(.listen_port == $old_port)).tls.server_name = \"$safe_new_sni\" | (.inbounds[] | select(.listen_port == $old_port)).tls.reality.handshake.server = \"$safe_new_sni\"" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
-            
+            jq "(.inbounds[] | select(.listen_port == $old_port)).tls.server_name = \"$safe_new_sni\" | (.inbounds[] | select(.listen_port == $old_port)).tls.reality.handshake.server = \"$safe_new_sni\"" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
             sqlite3 $DB_FILE "SELECT id, user_key FROM users WHERE port=$old_port AND node_type='vless';" | while read -r row; do
                 u_id=$(echo "$row" | cut -d'|' -f1)
                 u_key=$(echo "$row" | cut -d'|' -f2)
@@ -274,30 +306,53 @@ update_node_config() {
                 sqlite3 $DB_FILE "UPDATE users SET user_key='${part1_4}:${safe_new_sni}' WHERE id=$u_id;"
             done
         else
-            jq "(.inbounds[] | select(.listen_port == $old_port)).tls.server_name = \"$safe_new_sni\"" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
+            jq "(.inbounds[] | select(.listen_port == $old_port)).tls.server_name = \"$safe_new_sni\"" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
         fi
+        
+        systemctl restart sing-box
+        echo -e "${GREEN} Cập nhật SNI thành công!${NC}"
+        sleep 3
     fi
-    
-    systemctl restart sing-box
-    echo -e "${GREEN} Cập nhật Node thành công!${NC}"
-    sleep 3
 }
 
-delete_node() {
-    read -p "Nhập số Cổng (Port) của node muốn xóa: " del_port </dev/tty
+issue_cloudflare_cert() {
+    clear
+    echo -e "${BLUE}=========================================${NC}"
+    echo -e "${BLUE}   XIN CHỨNG CHỈ WILDCARD SSL CLOUDFLARE ${NC}"
+    echo -e "${BLUE}=========================================${NC}"
+    read -p " Nhập Tên miền gốc hoặc Wildcard (Ví dụ: nodeserver.ccwu.cc): " cf_domain </dev/tty
+    if [ -z "$cf_domain" ] || [ "$cf_domain" == "0" ] || [ "$cf_domain" == "n" ] || [ "$cf_domain" == "N" ]; then return; fi
     
-    # Xóa file JSON an toàn
-    jq "del(.inbounds[] | select(.listen_port == $del_port))" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || { echo "Lỗi file cấu hình!"; return; }
+    if [[ "$cf_domain" != \*.* ]]; then
+        echo -e "${YELLOW}--> Tự động chuyển đổi tên miền thành định dạng Wildcard: *.$cf_domain${NC}"
+        cf_domain="*.$cf_domain"
+        sleep 1
+    fi
     
-    # Dọn dẹp tường lửa
-    ufw delete allow $del_port/udp &>/dev/null
-    ufw delete allow $del_port/tcp &>/dev/null
+    read -p " Nhập Email tài khoản Cloudflare của bạn: " cf_email </dev/tty
+    read -p " Nhập Global API Key của Cloudflare: " cf_key </dev/tty
     
-    # Dọn dẹp iptables trong rc.local (nếu có)
-    sed -i "/dport $del_port/d" /etc/rc.local
+    if [ -z "$cf_email" ] || [ -z "$cf_key" ]; then
+        echo -e "${RED} Lỗi: Email và Global API Key không được để trống!${NC}"; sleep 3; return
+    fi
     
-    sqlite3 $DB_FILE "DELETE FROM users WHERE port=$del_port;"
-    systemctl restart sing-box
-    echo -e "${GREEN}--> Đã xóa hoàn toàn cổng $del_port!${NC}"
-    sleep 3
+    if [ ! -f ~/.acme.sh/acme.sh ]; then
+        curl https://get.acme.sh | sh -s email=$cf_email &>/dev/null
+    fi
+    
+    export CF_Key="$cf_key"
+    export CF_Email="$cf_email"
+    
+    ~/.acme.sh/acme.sh --issue --dns dns_cf -d "$cf_domain" --keylength ec-256 --force
+    
+    if [ $? -eq 0 ]; then
+        ~/.acme.sh/acme.sh --install-cert -d "$cf_domain" --ecc \
+            --key-file "$CONFIG_DIR/private.key" \
+            --fullchain-file "$CONFIG_DIR/cert.pem"
+        systemctl restart sing-box
+        echo -e "${GREEN} Xin thành công chứng chỉ Wildcard [$cf_domain]!${NC}"
+    else
+        echo -e "${RED} Xin cấp chứng chỉ thất bại! Vui lòng kiểm tra lại thông tin API hoặc trạng thái DNS.${NC}"
+    fi
+    sleep 5
 }

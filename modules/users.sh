@@ -194,6 +194,9 @@ view_and_export_links() {
     vps_country=$(curl -s -m 5 http://ip-api.com/json/ | jq -r '.country // "VPS"')
     safe_country=$(echo "$vps_country" | sed 's/ /_/g')
     
+    # Dòng hiển thị tên quốc gia mới được thêm vào
+    echo -e "--> Quốc gia máy chủ của bạn là: ${GREEN}$vps_country${NC}"
+    
     all_names=$(sqlite3 $DB_FILE "SELECT DISTINCT SUBSTR(user_key, 1, INSTR(user_key, ':') - 1) FROM users;")
     
     if [ -z "$all_names" ]; then

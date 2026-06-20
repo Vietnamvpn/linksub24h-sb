@@ -3,8 +3,8 @@
 check_and_update_system() {
     clear
     echo -e ""
-    echo -e "${BLUE}       KIỂM TRA HỆ THỐNG & CẬP NHẬT GÓI          ${NC}"
-    echo -e "${BLUE}         ---------------------------             ${NC}"
+    echo -e "${BLUE}       BẮT ĐẦU KIỂM TRA HỆ THỐNG & CẬP NHẬT GÓI       ${NC}"
+    echo -e "${BLUE}            -----------------------------             ${NC}"
     
     echo -e "${YELLOW}--> Đang kiểm tra thông tin hệ điều hành...${NC}"
     if [ -f /etc/os-release ]; then 

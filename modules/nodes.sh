@@ -76,12 +76,12 @@ node_wizard_initial() {
     done
     
     clear
-    echo -e "${PURPLE}========================================= ${NC}"
+    echo -e ""
     echo -e "${PURPLE}   BƯỚC 2: KHỞI TẠO USER CHO TẤT CẢ NODE  ${NC}"
-    echo -e "${PURPLE}========================================= ${NC}"
-    read -p " Nhập tên Tài khoản (Username) chung: " common_name </dev/tty
+    echo -e "${PURPLE}     ---------------------------------    ${NC}"
+    read -p " Nhập tên Tài khoản (Username): " common_name </dev/tty
     common_pass=$(tr -dc 'a-zA-Z0-9' </dev/urandom | head -c 10)
-    echo -e " Mật khẩu (Password) chung tự động tạo: ${GREEN}$common_pass${NC}"
+    echo -e " Mật khẩu (Password) tự động tạo: ${GREEN}$common_pass${NC}"
     common_uuid=$(cat /proc/sys/kernel/random/uuid)
     
     safe_common_name=$(echo "$common_name" | sed "s/'/''/g")
@@ -118,15 +118,15 @@ node_wizard_initial() {
         fi
     done
     systemctl restart sing-box; ufw reload &>/dev/null
-    echo -e "\n${GREEN} ĐÃ THIẾT LẬP XONG TOÀN BỘ NODE! Nhấn Enter để vào Menu.${NC}"
+    echo -e "\n${GREEN} Đã thiết lập xong toàn bộ node! Nhấn vvc để vào Menu.${NC}"
     read dummy </dev/tty
 }
 
 add_single_node_menu() {
     clear
-    echo -e "${BLUE}========================================= ${NC}"
-    echo -e "${BLUE}      [NODE] THÊM NODE PROXY ĐỘC LẬP      ${NC}"
-    echo -e "${BLUE}========================================= ${NC}"
+    echo -e ""
+    echo -e "${BLUE}      THÊM NODE SERVER MỚI      ${NC}"
+    echo -e "${BLUE}        ----------------        ${NC}"
     echo "1. Thêm cấu hình Node Hysteria2"
     echo "2. Thêm cấu hình Node TUIC v5"
     echo "3. Thêm cấu hình Node VLESS (gRPC-Reality)"
@@ -205,9 +205,9 @@ delete_node() {
 
 update_node_config() {
     clear
-    echo -e "${BLUE}=========================================${NC}"
-    echo -e "${BLUE}     CẬP NHẬT CẤU HÌNH NODE PROXY        ${NC}"
-    echo -e "${BLUE}=========================================${NC}"
+    echo -e ""
+    echo -e "${BLUE}     CẬP NHẬT CẤU HÌNH NODE SERVER        ${NC}"
+    echo -e "${BLUE}        ------------------------          ${NC}"
     echo -e " ${YELLOW}(Bạn có thể nhập 0 hoặc n để hủy bỏ và quay lại Menu)${NC}"
     echo -e "----------------------------------------"
     
@@ -317,10 +317,10 @@ update_node_config() {
 
 issue_cloudflare_cert() {
     clear
-    echo -e "${BLUE}=========================================${NC}"
+    echo -e ""
     echo -e "${BLUE}   XIN CHỨNG CHỈ WILDCARD SSL CLOUDFLARE ${NC}"
-    echo -e "${BLUE}=========================================${NC}"
-    read -p " Nhập Tên miền gốc hoặc Wildcard (Ví dụ: nodeserver.ccwu.cc): " cf_domain </dev/tty
+    echo -e "${BLUE}      -------------------------------    ${NC}"
+    read -p " Nhập Tên miền gốc hoặc Wildcard, Ví dụ: nodeserver.ccwu.cc: " cf_domain </dev/tty
     if [ -z "$cf_domain" ] || [ "$cf_domain" == "0" ] || [ "$cf_domain" == "n" ] || [ "$cf_domain" == "N" ]; then return; fi
     
     if [[ "$cf_domain" != \*.* ]]; then

@@ -1,0 +1,11 @@
+[Unit]
+Description=Sing-box Log Forwarder (Batch Mode)
+After=sing-box.service
+
+[Service]
+ExecStart=/usr/local/bin/log-forwarder.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

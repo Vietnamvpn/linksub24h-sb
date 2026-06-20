@@ -242,7 +242,8 @@ uninstall_system() {
         rm -f $vvc_BIN
         
         echo -e "${GREEN} Đã dọn sạch toàn bộ tàn dư của Sing-box trên VPS!${NC}"
-        echo -e "Bạn có thể cài lại bất cứ khi nào bằng lệnh: bash <(curl -Ls https://raw.githubusercontent.com/Vietnamvpn/linksub24h-sb/main/install.sh)."
+        echo -e "--> Hệ thống sẽ tự động thoát sau 2 giây...${NC}"
+        sleep 2
         exit 0
     else
         echo -e "${GREEN}Đã hủy thao tác gỡ cài đặt.${NC}"

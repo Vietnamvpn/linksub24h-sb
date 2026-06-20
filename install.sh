@@ -10,7 +10,13 @@ REPO_URL="https://github.com/Vietnamvpn/linksub24h-sb.git"
 APP_DIR="/usr/local/singbox-manager"
 
 clear
-echo -e "${YELLOW}--> Đang tải toàn bộ mã nguồn cấu trúc mới từ Github...${NC}"
+# --- BẮT ĐẦU CHÀO MỪNG ---
+echo -e "${GREEN}======================================================"
+echo -e "      CHÀO MỪNG BẠN ĐẾN VỚI HỆ THỐNG SING-BOX V3     "
+echo -e "======================================================${NC}"
+echo -e ""
+# ------------------------
+echo -e "${YELLOW}--> Hệ thống đang tải toàn bộ mã nguồn cấu trúc mới từ Github...${NC}"
 apt-get install -y git &>/dev/null
 
 # Xóa bản cũ nếu có và tải bản mới

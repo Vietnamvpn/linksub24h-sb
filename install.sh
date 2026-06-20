@@ -21,11 +21,11 @@ git clone $REPO_URL $APP_DIR || { echo -e "${RED}Lỗi: Không thể tải mã n
 chmod +x $APP_DIR/main.sh
 chmod +x $APP_DIR/modules/*.sh
 
-# Tạo lệnh gõ tắt 'sbls' để mở menu
-ln -sf $APP_DIR/main.sh /usr/local/bin/sbls
+# Tạo lệnh gõ tắt 'vvc' để mở menu
+ln -sf $APP_DIR/main.sh /usr/local/bin/vvc
 
 echo -e "${GREEN}--> Cài đặt mã nguồn hoàn tất!${NC}"
 sleep 1
 
 # Bắt đầu chạy file hệ thống chính
-sbls
+vvc

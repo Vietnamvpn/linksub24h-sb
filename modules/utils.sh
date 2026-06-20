@@ -12,7 +12,7 @@ export NC='\033[0m'
 export CONFIG_DIR="/usr/local/etc/sing-box"
 export CONFIG_FILE="$CONFIG_DIR/config.json"
 export DB_FILE="$CONFIG_DIR/proxy_data.db"
-export SBLS_BIN="/usr/local/bin/sbls"
+export vvc_BIN="/usr/local/bin/vvc"
 
 catch_error() {
     echo -e "\n${RED} LỖI tại dòng $1. Quá trình cài đặt tạm dừng!${NC}"

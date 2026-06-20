@@ -238,7 +238,7 @@ uninstall_system() {
         
         echo -e "${YELLOW}--> Đang xóa Tool Menu...${NC}"
         rm -rf $APP_DIR
-        rm -f $SBLS_BIN
+        rm -f $vvc_BIN
         
         echo -e "${GREEN} Đã dọn sạch toàn bộ tàn dư của Sing-box trên VPS!${NC}"
         echo -e "Script sẽ tự động thoát."
@@ -266,7 +266,7 @@ update_script() {
         echo -e "${GREEN} Đã cập nhật Tool thành công!${NC}"
         echo -e "--> Đang khởi động lại giao diện mới..."
         sleep 3
-        exec $SBLS_BIN
+        exec $vvc_BIN
     else
         echo -e "${RED} Cập nhật thất bại! Vui lòng kiểm tra kết nối Github.${NC}"
         sleep 3

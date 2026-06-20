@@ -1,0 +1,10 @@
+[Unit]
+Description=Sing-box Proxy Service
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/sing-box run -c /usr/local/etc/sing-box/config.json
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

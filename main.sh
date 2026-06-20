@@ -40,9 +40,9 @@ main_menu() {
     
     # Lấy trạng thái hiện tại của Sing-box
     if systemctl is-active --quiet sing-box; then
-        echo -e "Trạng thái: ${GREEN}Đang chạy (Active)${NC}"
+        echo -e "Trạng thái: ${GREEN}Đang chạy${NC}"
     else
-        echo -e "Trạng thái: ${RED}Đã dừng (Inactive)${NC}"
+        echo -e "Trạng thái: ${RED}Đã dừng${NC}"
     fi
     echo -e "-------------------------------------------------------------------------------"
     

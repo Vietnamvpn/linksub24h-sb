@@ -237,10 +237,10 @@ update_node_config() {
     echo -e " Node đang chọn có Tag hiện tại là: ${GREEN}$current_tag${NC}"
     echo -e " SNI hiện tại đang sử dụng là: ${GREEN}$current_sni${NC}"
     echo -e "----------------------------------------"
-    echo " 1. Đổi Cổng (Port) mới cho Node này"
-    echo " 2. Đổi Domain/IP kết nối mới cho Node này"
-    echo " 3. Đổi Tên nhận diện (Tag) mới cho Node này"
-    echo " 4. Đổi SNI (server_name) mới cho Node này"
+    echo " 1. Đổi Cổng (Port) kết nối"
+    echo " 2. Đổi Domain/IP kết nối"
+    echo " 3. Đổi Tên Tag nhận diện Node"
+    echo " 4. Đổi SNI (chứng chỉ) của Node"
     read -p " Chọn mục cần cập nhật (1-4): " update_choice </dev/tty
     
     if [ -z "$update_choice" ] || [ "$update_choice" == "0" ] || [ "$update_choice" == "n" ] || [ "$update_choice" == "N" ]; then
@@ -248,7 +248,7 @@ update_node_config() {
     fi
     
     if [ "$update_choice" == "1" ]; then
-        read -p " Nhập Cổng (Port) MỚI muốn thay đổi: " new_port </dev/tty
+        read -p " Nhập Cổng (Port) muốn thay đổi: " new_port </dev/tty
         if [ -z "$new_port" ] || [ "$new_port" == "0" ] || [ "$new_port" == "n" ] || [ "$new_port" == "N" ]; then return; fi
         
         port_check=$(jq -r ".inbounds[] | select(.listen_port == $new_port) | .listen_port" $CONFIG_FILE 2>/dev/null)

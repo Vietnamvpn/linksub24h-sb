@@ -186,22 +186,23 @@ toggle_user_status() {
 
 view_and_export_links() {
     clear
-    echo "======================================================="
-    echo "          DANH SÁCH TOÀN BỘ LINK NODE CỦA BẠN          "
-    echo "======================================================="
+    echo -e "${BLUE}=======================================================${NC}"
+    echo -e "${BLUE}           DANH SÁCH TOÀN BỘ LINK NODE CỦA BẠN         ${NC}"
+    echo -e "${BLUE}=======================================================${NC}"
     
-    echo -e "--> Đang lấy thông tin quốc gia của máy chủ..."
+    echo -e "${YELLOW}--> Đang lấy thông tin quốc gia của máy chủ...${NC}"
     vps_country=$(curl -s -m 5 http://ip-api.com/json/ | jq -r '.country // "VPS"')
     safe_country=$(echo "$vps_country" | sed 's/ /_/g')
     
     all_names=$(sqlite3 $DB_FILE "SELECT DISTINCT SUBSTR(user_key, 1, INSTR(user_key, ':') - 1) FROM users;")
     
     if [ -z "$all_names" ]; then
-        echo -e "\n ${YELLOW}Chưa có người dùng nào trên hệ thống.${NC}"
+        echo -e "\n ${RED}Chưa có người dùng nào trên hệ thống.${NC}"
     else
         for u_name in $all_names; do
-            echo -e "\n NGƯỜI DÙNG: $u_name"
-            echo "-------------------------------------------------------"
+            # Định dạng tiêu đề User với màu Tím
+            echo -e "\n${PURPLE}== NGƯỜI DÙNG: ${GREEN}$u_name${PURPLE} ==${NC}"
+            echo -e "${BLUE}-------------------------------------------------------${NC}"
             
             node_count=1
             sqlite3 $DB_FILE "SELECT node_type, port, domain, user_key FROM users WHERE user_key LIKE '$u_name:%';" | while read -r row; do
@@ -224,17 +225,18 @@ view_and_export_links() {
                 idx_str=$(printf "%02d" $node_count)
                 remark_tag="${safe_country}-${idx_str}"
                 
+                # Hiển thị link với màu trắng, rõ ràng
                 if [ "$ntype" == "hysteria2" ]; then
-                    echo " hysteria2://$upass@$dom:$port?insecure=1&sni=$sni#$remark_tag"
+                    echo -e " ${GREEN}[HY2]${NC}  hysteria2://$upass@$dom:$port?insecure=1&sni=$sni#$remark_tag"
                 elif [ "$ntype" == "tuic" ]; then
-                    echo " tuic://$uuid:$upass@$dom:$port?congestion_control=bbr&udp_relay_mode=native&alpn=h3&sni=$sni&allow_insecure=1#$remark_tag"
+                    echo -e " ${GREEN}[TUIC]${NC} tuic://$uuid:$upass@$dom:$port?congestion_control=bbr&udp_relay_mode=native&alpn=h3&sni=$sni&allow_insecure=1#$remark_tag"
                 elif [ "$ntype" == "vless" ]; then
-                    echo " vless://$uuid@$dom:$port?security=reality&encryption=none&pbk=$pub_k&headerType=none&fp=chrome&spx=%2F&type=grpc&sni=$sni&serviceName=vless-grpc&sid=0123456789abcdef#$remark_tag"
+                    echo -e " ${GREEN}[VLESS]${NC} vless://$uuid@$dom:$port?security=reality&encryption=none&pbk=$pub_k&headerType=none&fp=chrome&spx=%2F&type=grpc&sni=$sni&serviceName=vless-grpc&sid=0123456789abcdef#$remark_tag"
                 fi
                 node_count=$((node_count + 1))
             done
         done
     fi
-    echo -e "\n======================================================="
-    read -p "Nhấn Enter để quay lại..." dummy </dev/tty
+    echo -e "\n${BLUE}=======================================================${NC}"
+    read -p " Nhấn Enter để quay lại Menu..."
 }

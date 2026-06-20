@@ -73,7 +73,7 @@ main_menu() {
 }
 
 # Điểm neo khởi chạy
-if [ -f "/usr/local/bin/sing-box" ]; then 
+if [ -f "$APP_DIR/main.sh" ]; then 
     main_menu
 else 
     check_and_update_system

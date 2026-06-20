@@ -222,7 +222,7 @@ update_node_config() {
         
         node_type=$(jq -r ".inbounds[] | select(.listen_port == $old_port) | .type" $CONFIG_FILE)
         new_tag="${node_type}-$new_port"
-        jq "(.inbounds[] | select(.listen_port == $old_port)) |= (.listen_port = $new_port | .tag = \"$new_tag\")" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
+        jq "(.inbounds[] | select(.listen_port == $old_port)) |= (.listen_port = $new_port | .tag = \"$new_tag\")" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || { echo "Lỗi cập nhật JSON"; rm -f tmp.json; return; }
         sqlite3 $DB_FILE "UPDATE users SET port=$new_port WHERE port=$old_port;"
         
         ufw allow $new_port/tcp &>/dev/null; ufw allow $new_port/udp &>/dev/null

@@ -1,0 +1,15 @@
+singbox-manager/
+├── install.sh
+├── main.sh
+├── modules/
+│   ├── system.sh
+│   ├── nodes.sh
+│   ├── users.sh
+│   └── utils.sh
+└── templates/
+    ├── config.base.json
+    ├── inbound_hy2.json
+    ├── inbound_tuic.json
+    ├── inbound_vless.json
+    ├── sing-box.service
+    └── log-forwarder.sh

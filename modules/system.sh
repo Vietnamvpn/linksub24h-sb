@@ -252,19 +252,44 @@ update_script() {
     echo -e ""
     echo -e "${BLUE}       CẬP NHẬT MÃ NGUỒN TỪ GITHUB       ${NC}"
     echo -e "${BLUE}         ------------------------        ${NC}"
-    echo -e "--> Đang kéo bản cập nhật mới nhất từ Github..."
+    echo -e "--> Đang kiểm tra và kéo bản cập nhật mới nhất..."
     
     cd $APP_DIR
+    
+    # 1. Lưu lại mã phiên bản hiện tại trước khi cập nhật
+    OLD_COMMIT=$(git rev-parse HEAD 2>/dev/null)
+    
+    # Xóa các thay đổi rác và kéo bản mới về
     git reset --hard HEAD &>/dev/null
-    git pull origin main
+    git pull origin main &>/dev/null
     
     if [ $? -eq 0 ]; then
+        # 2. Lấy mã phiên bản sau khi tải về
+        NEW_COMMIT=$(git rev-parse HEAD 2>/dev/null)
+        
         chmod +x $APP_DIR/main.sh
         chmod +x $APP_DIR/modules/*.sh
-        echo -e "${GREEN} Đã cập nhật Tool thành công!${NC}"
-        echo -e "--> Đang khởi động lại giao diện mới..."
-        sleep 3
-        exec $vvc_BIN
+        echo -e "${GREEN}--> Tải mã nguồn thành công!${NC}"
+        
+        # 3. Liệt kê các thay đổi nếu có
+        if [ "$OLD_COMMIT" != "$NEW_COMMIT" ]; then
+            echo -e ""
+            echo -e "${YELLOW}       NHỮNG ĐIỂM MỚI TRONG BẢN CẬP NHẬT:       ${NC}"
+            echo -e "${YELLOW}          ----------------------------          ${NC}"
+            
+            # In log từ bản cũ đến bản mới (hiển thị dấu * màu xanh và nội dung commit)
+            git log ${OLD_COMMIT}..${NEW_COMMIT} --pretty=format:" ${GREEN}*${NC} %s"
+            
+            echo -e "\n${YELLOW}------------------------------------------------${NC}"
+        else
+            echo -e "${YELLOW}--> Phiên bản của bạn đã là mới nhất. Không có thay đổi nào!${NC}"
+        fi
+        
+        echo -e "\n--> Đang khởi động lại giao diện mới..."
+        sleep 4
+        
+        # Sửa lại đoạn này thành lệnh gọi trực tiếp vvc cho an toàn
+        exec vvc
     else
         echo -e "${RED} Cập nhật thất bại! Vui lòng kiểm tra kết nối Github.${NC}"
         sleep 3

@@ -186,9 +186,9 @@ toggle_user_status() {
 
 view_and_export_links() {
     clear
-    echo -e "${BLUE}=======================================================${NC}"
+    echo -e ""
     echo -e "${BLUE}           DANH SÁCH TOÀN BỘ LINK NODE CỦA BẠN         ${NC}"
-    echo -e "${BLUE}=======================================================${NC}"
+    echo -e "${BLUE}              ------------------------------           ${NC}"
     
     echo -e "${YELLOW}--> Đang lấy thông tin quốc gia của máy chủ...${NC}"
     vps_country=$(curl -s -m 5 http://ip-api.com/json/ | jq -r '.country // "VPS"')

@@ -3,6 +3,7 @@
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 # Thay đường dẫn này bằng Link Github chứa thư mục source của bạn
@@ -10,12 +11,19 @@ REPO_URL="https://github.com/Vietnamvpn/linksub24h-sb.git"
 APP_DIR="/usr/local/singbox-manager"
 
 clear
-# --- BẮT ĐẦU CHÀO MỪNG ---
-echo -e "${GREEN}======================================================"
-echo -e "      CHÀO MỪNG BẠN ĐẾN VỚI HỆ THỐNG SING-BOX V3     "
-echo -e "======================================================${NC}"
+# --- BẮT ĐẦU CHÀO MỪNG VÀ THÔNG TIN TÁC GIẢ ---
+echo -e "${GREEN}======================================================${NC}"
+echo -e "${GREEN}║      CHÀO MỪNG BẠN ĐẾN VỚI HỆ THỐNG SING-BOX V3      ║${NC}"
+echo -e "${GREEN}======================================================${NC}"
+echo -e "${CYAN}  → Tác giả: Vietnamvpn${NC}"
+echo -e "${CYAN}  → Phiên bản: Cấu trúc mới ổn định${NC}"
+echo -e "${GREEN}======================================================${NC}"
 echo -e ""
-# ------------------------
+echo -e "${YELLOW}Nhấn Enter để tiếp tục cài đặt...${NC}"
+read -r
+# -----------------------------------------------
+
+clear
 echo -e "${YELLOW}--> Hệ thống đang tải toàn bộ mã nguồn cấu trúc mới từ Github...${NC}"
 apt-get install -y git &>/dev/null
 

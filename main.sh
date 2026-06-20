@@ -1,0 +1,80 @@
+#!/bin/bash
+
+# Khai báo thư mục làm việc tuyệt đối
+export APP_DIR="/usr/local/singbox-manager"
+
+# Nạp các Module
+source "$APP_DIR/modules/utils.sh"
+source "$APP_DIR/modules/system.sh"
+source "$APP_DIR/modules/nodes.sh"
+source "$APP_DIR/modules/users.sh"
+
+main_menu() {
+    clear
+    echo -e "${BLUE}===============================================================================${NC}"
+    echo -e "${BLUE}                       MENU QUẢN LÝ SING-BOX PROXY TOOL V3                     ${NC}"
+    echo -e "${BLUE}===============================================================================${NC}"
+    echo -e " 1. Xem danh sách & Xuất Link kết nối User | 10. Xin chứng chỉ SSL Cloudflare"
+    echo -e " 2. Xem LOG theo dõi kết nối trực tiếp     | 11. Bắt đầu Sing-box"
+    echo -e " 3. Xem trạng thái hệ thống VPS            | 12. Dừng Sing-box"
+    echo -e "-------------------------------------------------------------------------------"
+    echo -e " 4. Thêm một Node độc lập mới              | 13. Khởi động lại"
+    echo -e " 5. Xóa bỏ một Node (Đóng cổng)            | 14. Gỡ cài đặt, Xóa sạch tàn dư"
+    echo -e " 6. Cập nhật Đổi cổng hoặc Domain cho Node | 15. Cập nhật Tool (Từ Github)"
+    echo -e "-------------------------------------------------------------------------------"
+    echo -e " 7. Thêm người dùng                        | 16. Tạm khóa / Mở khóa mạng User"
+    echo -e " 8. Xóa bỏ người dùng khỏi Node            | 17. Cấu hình Webhook"
+    echo -e " 9. Tạo bộ nhớ ảo (SWAP)                   |  0. Thoát hệ thống"
+    echo -e "${BLUE}===============================================================================${NC}"
+    
+    if systemctl is-active --quiet sing-box; then
+        echo -e "Trạng thái: ${GREEN}Đang chạy (Active)${NC}"
+    else
+        echo -e "Trạng thái: ${RED}Đã dừng (Inactive)${NC}"
+    fi
+    echo -e "-------------------------------------------------------------------------------"
+    
+    read -p "Nhập lựa chọn: " m_choice </dev/tty
+    
+    case $m_choice in
+        1) list_links ;;
+        2) journalctl -u sing-box --no-hostname -n 50 -f ;;
+        3) view_vps_status ;;
+        4) add_single_node_menu ;;
+        5) delete_node ;;
+        6) update_node_config ;;
+        7) add_user_advanced ;;
+        8) delete_user_from_node ;;
+        9) create_swap ;;
+        10) issue_cloudflare_cert ;;
+        11) 
+            systemctl start sing-box
+            echo -e "${GREEN} Đã BẬT dịch vụ Sing-box!${NC}"
+            sleep 3 
+            ;;
+        12) 
+            systemctl stop sing-box
+            echo -e "${YELLOW} Đã DỪNG dịch vụ Sing-box!${NC}"
+            sleep 3 
+            ;;
+        13) 
+            systemctl restart sing-box
+            echo -e "${GREEN} Đã KHỞI ĐỘNG LẠI dịch vụ Sing-box thành công!${NC}"
+            sleep 3 
+            ;;
+        14) uninstall_system ;;
+        15) update_script ;;
+        16) toggle_user_status ;;
+        17) config_webhook ;;
+        0) exit 0 ;;
+        *) ;;
+    esac
+    main_menu
+}
+
+# Điểm neo khởi chạy
+if [ -f "/usr/local/bin/sing-box" ]; then 
+    main_menu
+else 
+    check_and_update_system
+fi

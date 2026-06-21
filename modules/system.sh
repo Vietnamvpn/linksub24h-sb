@@ -339,6 +339,7 @@ update_script() {
         echo -e "${RED} Cập nhật thất bại! Vui lòng kiểm tra kết nối Github.${NC}"
         sleep 3
     fi
+}
 
     config_api_web() {
     clear
@@ -369,5 +370,4 @@ update_script() {
             echo -e "${GREEN} Đã hủy liên kết Web Panel!${NC}"; sleep 2 ;;
         0) return ;;
     esac
-}
 }

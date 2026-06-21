@@ -102,10 +102,12 @@ WantedBy=multi-user.target
 EOF
     systemctl daemon-reload && systemctl enable log-forwarder &>/dev/null
     systemctl start log-forwarder &>/dev/null
-
-    # =========================================================================
+# =========================================================================
     # KHỞI TẠO API SERVER (TỪ FILE GITHUB)
     # =========================================================================
+    # Đã định nghĩa đường dẫn cố định để tránh lỗi biến môi trường rỗng
+    APP_DIR="/usr/local/singbox-manager"
+    
     echo -e "${YELLOW}--> Đang thiết lập và biên dịch API Server (Golang)...${NC}"
     
     # Kiểm tra xem file tải từ Github về có tồn tại không rồi mới build
@@ -113,7 +115,7 @@ EOF
         cd $APP_DIR && go build -o /usr/local/bin/node-api api_server.go
         chmod +x /usr/local/bin/node-api
     else
-        echo -e "${RED}--> Lỗi: Không tìm thấy mã nguồn api_server.go!${NC}"
+        echo -e "${RED}--> Lỗi: Không tìm thấy mã nguồn api_server.go tại $APP_DIR!${NC}"
     fi
 
     # Tạo file chạy ngầm (Service) cho API nhưng để ở trạng thái ngủ đông

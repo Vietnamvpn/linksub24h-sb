@@ -348,7 +348,7 @@ sync_nodes_to_web() {
     echo -e "${YELLOW}--> Đang đồng bộ danh sách người dùng lên Web trung tâm...${NC}"
     
     API_CONF="/usr/local/etc/sing-box/api.conf"
-    DB_FILE="/usr/local/etc/sing-box/users.db"
+    DB_FILE="/usr/local/etc/sing-box/proxy_data.db"
     
     # Lấy thông tin từ file config
     API_URL=$(grep "WEB_URL=" "$API_CONF" | cut -d'=' -f2)
@@ -442,7 +442,7 @@ sync_nodes_to_web() {
     # 2. Lấy dữ liệu từ SQLite và convert sang JSON
     # Giả sử bạn muốn gửi: node_type, port, domain, user_key
     # Dùng sqlite3 kết hợp với jq để tạo JSON
-    JSON_DATA=$(sqlite3 /usr/local/etc/sing-box/users.db "SELECT json_object('node_type', node_type, 'port', port, 'domain', domain, 'user_key', user_key) FROM users;" | jq -s '.')
+    JSON_DATA=$(sqlite3 /usr/local/etc/sing-box/proxy_data.db "SELECT json_object('node_type', node_type, 'port', port, 'domain', domain, 'user_key', user_key) FROM users;" | jq -s '.')
     
     # 3. Gửi lên web trung tâm
     # Bạn gửi kèm tên 'admin' như yêu cầu

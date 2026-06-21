@@ -103,63 +103,39 @@ EOF
     systemctl daemon-reload && systemctl enable log-forwarder &>/dev/null
     systemctl start log-forwarder &>/dev/null
 
-    # --- KHỐI TẠO API GOLANG CHẠY NGẦM ---
-    echo -e "${YELLOW}--> Đang thiết lập API Server (Golang)...${NC}"
-    cat << 'EOF' > $APP_DIR/api_server.go
-package main
-import ( "bufio"; "encoding/json"; "net/http"; "os"; "os/exec"; "strings" )
-var APIToken, Port string
-func loadConfig() error {
-	file, err := os.Open("/usr/local/etc/sing-box/api.conf")
-	if err != nil { return err }
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "TOKEN=") { APIToken = strings.TrimPrefix(line, "TOKEN=") }
-		if strings.HasPrefix(line, "PORT=") { Port = ":" + strings.TrimPrefix(line, "PORT=") }
-	}
-	if APIToken == "" || Port == ":" { return os.ErrNotExist }
-	return nil
-}
-type Payload struct { Action string `json:"action"`; Username string `json:"username"` }
-func handler(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("X-Node-Token") != APIToken { w.WriteHeader(401); return }
-	var p Payload
-	json.NewDecoder(r.Body).Decode(&p)
-	cmd := exec.Command("bash", "/root/singbox-manager/modules/users.sh", "api", p.Action, p.Username)
-	out, err := cmd.CombinedOutput()
-	w.Header().Set("Content-Type", "application/json")
-	if err != nil {
-		w.WriteHeader(500)
-		json.NewEncoder(w).Encode(map[string]string{"status": "error", "message": strings.TrimSpace(string(out))})
-		return
-	}
-	// Nếu là lệnh add, script bash sẽ in ra proxy_link. Bắt lấy nó.
-	json.NewEncoder(w).Encode(map[string]string{"status": "success", "proxy_link": strings.TrimSpace(string(out))})
-}
-func main() {
-	if err := loadConfig(); err != nil { os.Exit(1) }
-	http.HandleFunc("/api/node_action", handler)
-	http.ListenAndServe(Port, nil)
-}
-EOF
-    cd $APP_DIR && go build -o /usr/local/bin/node-api api_server.go
-    chmod +x /usr/local/bin/node-api
-    rm -f $APP_DIR/api_server.go
+    # =========================================================================
+    # KHỞI TẠO API SERVER (TỪ FILE GITHUB)
+    # =========================================================================
+    echo -e "${YELLOW}--> Đang thiết lập và biên dịch API Server (Golang)...${NC}"
+    
+    # Kiểm tra xem file tải từ Github về có tồn tại không rồi mới build
+    if [ -f "$APP_DIR/api_server.go" ]; then
+        cd $APP_DIR && go build -o /usr/local/bin/node-api api_server.go
+        chmod +x /usr/local/bin/node-api
+    else
+        echo -e "${RED}--> Lỗi: Không tìm thấy mã nguồn api_server.go!${NC}"
+    fi
 
+    # Tạo file chạy ngầm (Service) cho API nhưng để ở trạng thái ngủ đông
     cat << 'EOF' > /etc/systemd/system/node-api.service
 [Unit]
-Description=Go API Server
+Description=Go API Server for Sing-box Node Management
 After=network.target
+
 [Service]
+Type=simple
+WorkingDirectory=/usr/local/bin
 ExecStart=/usr/local/bin/node-api
 Restart=on-failure
+RestartSec=5
+User=root
+
 [Install]
 WantedBy=multi-user.target
 EOF
+
     systemctl daemon-reload
-    # --- KẾT THÚC KHỐI TẠO API ---
+    # =========================================================================
     
     echo -e "${GREEN}--> HOÀN TẤT THIẾT LẬP LÕI! Chuẩn bị chuyển sang cài đặt Node...${NC}"
     sleep 2
@@ -327,6 +303,17 @@ update_script() {
         
         chmod +x $APP_DIR/main.sh
         chmod +x $APP_DIR/modules/*.sh
+        # ---------------------------------------------------------
+        echo -e "${YELLOW}--> Đang biên dịch lại các thành phần cốt lõi...${NC}"
+        if [ -f "$APP_DIR/api_server.go" ]; then
+            go build -o /usr/local/bin/node-api api_server.go
+            chmod +x /usr/local/bin/node-api
+            # Nếu API đang chạy thì khởi động lại để nhận code mới
+            if systemctl is-active --quiet node-api; then
+                systemctl restart node-api &>/dev/null
+            fi
+        fi
+        # ---------------------------------------------------------
         echo -e "${GREEN}--> Tải mã nguồn thành công!${NC}"
         
         # 3. Liệt kê các thay đổi nếu có
@@ -352,7 +339,7 @@ update_script() {
         echo -e "${RED} Cập nhật thất bại! Vui lòng kiểm tra kết nối Github.${NC}"
         sleep 3
     fi
-    
+
     config_api_web() {
     clear
     echo -e "\n${BLUE}    LIÊN KẾT API VỚI WEB PANEL TRUNG TÂM   ${NC}\n------------------------"

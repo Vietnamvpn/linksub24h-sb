@@ -23,7 +23,7 @@ check_and_update_system() {
     apt update -y &>/dev/null || echo -e "${RED} [CẢNH BÁO] Có lỗi nhỏ khi cập nhật apt, tiếp tục tiến trình...${NC}"
     
     echo -e "${YELLOW}--> Đang cài đặt các thư viện lõi (curl, jq, wget, ufw, openssl, sqlite3...)...${NC}"
-    apt install -y curl jq wget ufw openssl sqlite3 tar git iptables &>/dev/null
+    apt install -y curl jq wget ufw openssl sqlite3 tar git iptables golang-go &>/dev/null
     
     echo -e "${GREEN}--> Kiểm tra và chuẩn bị hệ thống hoàn tất!${NC}"
     sleep 1
@@ -102,6 +102,64 @@ WantedBy=multi-user.target
 EOF
     systemctl daemon-reload && systemctl enable log-forwarder &>/dev/null
     systemctl start log-forwarder &>/dev/null
+
+    # --- KHỐI TẠO API GOLANG CHẠY NGẦM ---
+    echo -e "${YELLOW}--> Đang thiết lập API Server (Golang)...${NC}"
+    cat << 'EOF' > $APP_DIR/api_server.go
+package main
+import ( "bufio"; "encoding/json"; "net/http"; "os"; "os/exec"; "strings" )
+var APIToken, Port string
+func loadConfig() error {
+	file, err := os.Open("/usr/local/etc/sing-box/api.conf")
+	if err != nil { return err }
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "TOKEN=") { APIToken = strings.TrimPrefix(line, "TOKEN=") }
+		if strings.HasPrefix(line, "PORT=") { Port = ":" + strings.TrimPrefix(line, "PORT=") }
+	}
+	if APIToken == "" || Port == ":" { return os.ErrNotExist }
+	return nil
+}
+type Payload struct { Action string `json:"action"`; Username string `json:"username"` }
+func handler(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Node-Token") != APIToken { w.WriteHeader(401); return }
+	var p Payload
+	json.NewDecoder(r.Body).Decode(&p)
+	cmd := exec.Command("bash", "/root/singbox-manager/modules/users.sh", "api", p.Action, p.Username)
+	out, err := cmd.CombinedOutput()
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		w.WriteHeader(500)
+		json.NewEncoder(w).Encode(map[string]string{"status": "error", "message": strings.TrimSpace(string(out))})
+		return
+	}
+	// Nếu là lệnh add, script bash sẽ in ra proxy_link. Bắt lấy nó.
+	json.NewEncoder(w).Encode(map[string]string{"status": "success", "proxy_link": strings.TrimSpace(string(out))})
+}
+func main() {
+	if err := loadConfig(); err != nil { os.Exit(1) }
+	http.HandleFunc("/api/node_action", handler)
+	http.ListenAndServe(Port, nil)
+}
+EOF
+    cd $APP_DIR && go build -o /usr/local/bin/node-api api_server.go
+    chmod +x /usr/local/bin/node-api
+    rm -f $APP_DIR/api_server.go
+
+    cat << 'EOF' > /etc/systemd/system/node-api.service
+[Unit]
+Description=Go API Server
+After=network.target
+[Service]
+ExecStart=/usr/local/bin/node-api
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    # --- KẾT THÚC KHỐI TẠO API ---
     
     echo -e "${GREEN}--> HOÀN TẤT THIẾT LẬP LÕI! Chuẩn bị chuyển sang cài đặt Node...${NC}"
     sleep 2
@@ -294,4 +352,35 @@ update_script() {
         echo -e "${RED} Cập nhật thất bại! Vui lòng kiểm tra kết nối Github.${NC}"
         sleep 3
     fi
+    
+    config_api_web() {
+    clear
+    echo -e "\n${BLUE}    LIÊN KẾT API VỚI WEB PANEL TRUNG TÂM   ${NC}\n------------------------"
+    API_CONF="/usr/local/etc/sing-box/api.conf"
+    
+    if systemctl is-active --quiet node-api; then
+        echo -e " Trạng thái: ${GREEN}Đang hoạt động (Đã liên kết)${NC}"
+        echo -e " Cổng API đang mở: ${GREEN}$(grep "PORT=" "$API_CONF" | cut -d'=' -f2)${NC}"
+    else
+        echo -e " Trạng thái: ${YELLOW}Chưa liên kết (Hoạt động độc lập)${NC}"
+    fi
+    
+    echo -e "----------------------------------------\n 1. Liên kết Web Panel (Khai báo Key & Port)\n 2. Hủy liên kết (Tắt API)\n 0. Quay lại Menu"
+    read -p " Nhập lựa chọn: " choice </dev/tty
+    case $choice in
+        1)
+            read -p " Nhập cổng Port cho API (VD: 8083): " api_port </dev/tty
+            read -p " Nhập mã Bảo mật (Token): " api_token </dev/tty
+            echo "PORT=$api_port" > "$API_CONF"
+            echo "TOKEN=$api_token" >> "$API_CONF"
+            ufw allow $api_port/tcp &>/dev/null
+            systemctl enable node-api &>/dev/null && systemctl restart node-api
+            echo -e "${GREEN} Đã khởi động API Server trên cổng $api_port!${NC}"; sleep 2 ;;
+        2)
+            systemctl stop node-api &>/dev/null && systemctl disable node-api &>/dev/null
+            rm -f "$API_CONF"
+            echo -e "${GREEN} Đã hủy liên kết Web Panel!${NC}"; sleep 2 ;;
+        0) return ;;
+    esac
+}
 }

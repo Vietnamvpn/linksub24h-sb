@@ -383,7 +383,8 @@ sync_nodes_to_web() {
 # =========================================================================
 config_api_web() {
     clear
-    echo -e "\n${BLUE}    LIÊN KẾT API VỚI WEB PANEL TRUNG TÂM   ${NC}\n------------------------"
+    echo -e "\n${BLUE}    LIÊN KẾT API VỚI WEB PANEL TRUNG TÂM   ${NC}\n"
+    echo -e "${BLUE}        ---------------------------------      ${NC}"
     API_CONF="/usr/local/etc/sing-box/api.conf"
     
     if systemctl is-active --quiet node-api; then

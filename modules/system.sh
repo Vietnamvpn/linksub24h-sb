@@ -341,33 +341,119 @@ update_script() {
     fi
 }
 
-    config_api_web() {
+# =========================================================================
+# HÀM ĐỒNG BỘ DỮ LIỆU LÊN WEB TRUNG TÂM
+# =========================================================================
+sync_nodes_to_web() {
+    echo -e "${YELLOW}--> Đang đồng bộ danh sách người dùng lên Web trung tâm...${NC}"
+    
+    API_CONF="/usr/local/etc/sing-box/api.conf"
+    DB_FILE="/usr/local/etc/sing-box/users.db"
+    
+    # Lấy thông tin từ file config
+    API_URL=$(grep "WEB_URL=" "$API_CONF" | cut -d'=' -f2)
+    API_TOKEN=$(grep "TOKEN=" "$API_CONF" | cut -d'=' -f2)
+
+    if [ -z "$API_URL" ] || [ -z "$API_TOKEN" ]; then
+        echo -e "${RED} [LỖI] Thông tin Web URL hoặc Token chưa được lưu!${NC}"
+        return
+    fi
+
+    # Lấy dữ liệu từ SQLite (giả sử bảng là 'users', các cột là user_key, port, node_type)
+    # Dùng jq để tạo format JSON chuẩn
+    JSON_DATA=$(sqlite3 "$DB_FILE" "SELECT json_object('user_key', user_key, 'port', port, 'node_type', node_type) FROM users;" | jq -s '.')
+
+    # Gửi lên Web trung tâm
+    RESPONSE=$(curl -s -X POST "$API_URL" \
+         -H "Content-Type: application/json" \
+         -H "Authorization: Bearer $API_TOKEN" \
+         -d "{\"admin\": \"admin\", \"nodes\": $JSON_DATA}")
+
+    if [[ "$RESPONSE" == *"success"* ]]; then
+        echo -e "${GREEN}--> Đã đẩy dữ liệu lên Web thành công!${NC}"
+    else
+        echo -e "${RED}--> Lỗi: Web trung tâm không phản hồi hoặc dữ liệu sai định dạng.${NC}"
+    fi
+}
+
+# =========================================================================
+# HÀM CẤU HÌNH API
+# =========================================================================
+config_api_web() {
     clear
     echo -e "\n${BLUE}    LIÊN KẾT API VỚI WEB PANEL TRUNG TÂM   ${NC}\n------------------------"
     API_CONF="/usr/local/etc/sing-box/api.conf"
     
     if systemctl is-active --quiet node-api; then
         echo -e " Trạng thái: ${GREEN}Đang hoạt động (Đã liên kết)${NC}"
-        echo -e " Cổng API đang mở: ${GREEN}$(grep "PORT=" "$API_CONF" | cut -d'=' -f2)${NC}"
+        echo -e " Cổng API: ${GREEN}$(grep "PORT=" "$API_CONF" | cut -d'=' -f2)${NC}"
     else
         echo -e " Trạng thái: ${YELLOW}Chưa liên kết (Hoạt động độc lập)${NC}"
     fi
     
-    echo -e "----------------------------------------\n 1. Liên kết Web Panel (Khai báo Key & Port)\n 2. Hủy liên kết (Tắt API)\n 0. Quay lại Menu"
+    echo -e "----------------------------------------"
+    echo -e " 1. Liên kết Web Panel (Khai báo Key, Port & URL)"
+    echo -e " 2. Hủy liên kết (Tắt API)"
+    echo -e " 0. Quay lại Menu"
     read -p " Nhập lựa chọn: " choice </dev/tty
+    
     case $choice in
         1)
             read -p " Nhập cổng Port cho API (VD: 8083): " api_port </dev/tty
             read -p " Nhập mã Bảo mật (Token): " api_token </dev/tty
+            read -p " Nhập URL Web trung tâm (VD: https://domain.com/api/sync): " api_web_url </dev/tty
+            
+            # Lưu config
             echo "PORT=$api_port" > "$API_CONF"
             echo "TOKEN=$api_token" >> "$API_CONF"
-            ufw allow $api_port/tcp &>/dev/null
+            echo "WEB_URL=$api_web_url" >> "$API_CONF"
+            
+            # Cấu hình hệ thống
+            ufw allow "$api_port/tcp" &>/dev/null
             systemctl enable node-api &>/dev/null && systemctl restart node-api
-            echo -e "${GREEN} Đã khởi động API Server trên cổng $api_port!${NC}"; sleep 2 ;;
+            echo -e "${GREEN} Đã khởi động API Server!${NC}"
+            
+            # Tự động đồng bộ ngay lập tức
+            sync_nodes_to_web
+            sleep 3
+            ;;
         2)
             systemctl stop node-api &>/dev/null && systemctl disable node-api &>/dev/null
             rm -f "$API_CONF"
             echo -e "${GREEN} Đã hủy liên kết Web Panel!${NC}"; sleep 2 ;;
         0) return ;;
+        *) echo " Lựa chọn không hợp lệ!"; sleep 1 ;;
     esac
+}
+
+sync_nodes_to_web() {
+    echo -e "${YELLOW}--> Đang đồng bộ danh sách Node lên Web trung tâm...${NC}"
+    
+    # 1. Đọc thông tin API từ file
+    API_CONF="/usr/local/etc/sing-box/api.conf"
+    API_URL=$(grep "WEB_URL=" "$API_CONF" | cut -d'=' -f2) # Bạn cần thêm dòng WEB_URL vào api.conf
+    API_TOKEN=$(grep "TOKEN=" "$API_CONF" | cut -d'=' -f2)
+
+    if [ -z "$API_URL" ]; then
+        echo -e "${RED} [LỖI] Chưa cấu hình WEB_URL trong api.conf!${NC}"
+        return
+    fi
+
+    # 2. Lấy dữ liệu từ SQLite và convert sang JSON
+    # Giả sử bạn muốn gửi: node_type, port, domain, user_key
+    # Dùng sqlite3 kết hợp với jq để tạo JSON
+    JSON_DATA=$(sqlite3 /usr/local/etc/sing-box/users.db "SELECT json_object('node_type', node_type, 'port', port, 'domain', domain, 'user_key', user_key) FROM users;" | jq -s '.')
+    
+    # 3. Gửi lên web trung tâm
+    # Bạn gửi kèm tên 'admin' như yêu cầu
+    curl -s -X POST "$API_URL" \
+         -H "Content-Type: application/json" \
+         -H "Authorization: Bearer $API_TOKEN" \
+         -d "{\"admin\": \"admin\", \"nodes\": $JSON_DATA}" &>/dev/null
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}--> Đã đẩy dữ liệu lên Web thành công!${NC}"
+    else
+        echo -e "${RED}--> Lỗi kết nối đến Web trung tâm.${NC}"
+    fi
 }

@@ -29,6 +29,9 @@ func loadConfig() error {
 			Port = ":" + strings.TrimPrefix(line, "PORT=")
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
 	if APIToken == "" || Port == ":" {
 		return fmt.Errorf("missing config")
 	}

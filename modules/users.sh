@@ -5,7 +5,7 @@ if [ "$1" == "api" ]; then
     action=$2
     sub_id=$3 
     CONFIG_FILE="/usr/local/etc/sing-box/config.json"
-    DB_FILE="/usr/local/etc/sing-box/users.db"
+    DB_FILE="/usr/local/etc/sing-box/proxy_data.db"
     dom=$(curl -s ifconfig.me)
 
     if [ "$action" == "add" ]; then

@@ -6,7 +6,7 @@ if [ "$1" == "api" ]; then
     sub_id=$3 
     CONFIG_FILE="/usr/local/etc/sing-box/config.json"
     DB_FILE="/usr/local/etc/sing-box/proxy_data.db"
-    dom=$(curl -s ifconfig.me)
+    # Đã xóa dòng gán cứng IP ở đây
 
     if [ "$action" == "add" ]; then
         db_count=$(sqlite3 $DB_FILE "SELECT COUNT(*) FROM users WHERE user_key LIKE '$sub_id:%';")
@@ -15,6 +15,11 @@ if [ "$1" == "api" ]; then
             uuid_gen=$(sqlite3 $DB_FILE "SELECT user_key FROM users WHERE user_key LIKE '$sub_id:%' AND node_type='vless' LIMIT 1;" | cut -d':' -f2 | tr -d '\r')
             port=$(sqlite3 $DB_FILE "SELECT port FROM users WHERE user_key LIKE '$sub_id:%' AND node_type='vless' LIMIT 1;")
             sni=$(jq -r ".inbounds[] | select(.listen_port == $port).tls.server_name" $CONFIG_FILE)
+            
+            # Lấy domain chuẩn từ Database cho Node cũ
+            dom=$(sqlite3 $DB_FILE "SELECT domain FROM users WHERE port=$port LIMIT 1;")
+            if [ -z "$dom" ]; then dom=$(curl -s ifconfig.me); fi
+            
             echo "vless://$uuid_gen@$dom:$port?security=reality&encryption=none&pbk=$pub_k&headerType=none&fp=chrome&spx=%2F&type=grpc&sni=$sni&serviceName=vless-grpc&sid=0123456789abcdef"
             exit 0
         fi
@@ -25,6 +30,11 @@ if [ "$1" == "api" ]; then
         
         for p in $ports; do
             type=$(jq -r ".inbounds[] | select(.listen_port == $p) | .type" $CONFIG_FILE)
+            
+            # Lấy domain chuẩn từ Database cho Node mới được duyệt tới
+            dom=$(sqlite3 $DB_FILE "SELECT domain FROM users WHERE port=$p LIMIT 1;")
+            if [ -z "$dom" ]; then dom=$(curl -s ifconfig.me); fi
+            
             if [ "$type" == "hysteria2" ]; then
                 jq "(.inbounds[] | select(.listen_port == $p).users) += [{\"name\": \"$sub_id\", \"password\": \"$upass\"}]" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
                 sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('hysteria2', $p, '$dom', '$sub_id::$upass::');"

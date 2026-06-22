@@ -105,9 +105,12 @@ node_wizard_initial() {
             
         elif [ "$type" == "vless" ]; then
             /usr/local/bin/sing-box generate reality-keypair > /tmp/kp.txt 2>&1
-            priv_key=$(awk '/[Pp]rivate/ {print $NF}' /tmp/kp.txt | tr -d '\r')
-            pub_key=$(awk '/[Pp]ublic/ {print $NF}' /tmp/kp.txt | tr -d '\r')
-            if [ -z "$priv_key" ]; then 
+            
+            # ✅ Cập nhật tương tự như trên
+            priv_key=$(grep -i "Private" /tmp/kp.txt | awk '{print $NF}' | tr -d '\r')
+            pub_key=$(grep -i "Public" /tmp/kp.txt | awk '{print $NF}' | tr -d '\r')
+            
+            if [ -z "$priv_key" ] || [ -z "$pub_key" ]; then 
                 priv_key="mK3_Ag3X_Placeholder_Must_Be_43_Chars_Long"
                 pub_key="pub_placeholder"
             fi
@@ -175,10 +178,14 @@ add_single_node_menu() {
         jq ".inbounds += [{\"type\": \"tuic\", \"tag\": \"tuic-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": [{\"uuid\": \"$uuid_gen\", \"password\": \"$upass\"}], \"congestion_control\": \"bbr\", \"tls\": {\"enabled\": true, \"certificate_path\": \"$CONFIG_DIR/cert.pem\", \"key_path\": \"$CONFIG_DIR/private.key\", \"alpn\": [\"h3\"], \"server_name\": \"$sni\"}}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
         sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('tuic', $port, '$safe_dom', '$safe_uname:$uuid_gen:$safe_upass::');"
     elif [ "$proto" == "vless" ]; then
-        /usr/local/bin/sing-box generate reality-keypair > /tmp/kp.txt 2>/dev/null || true
-        priv_key=$(awk '/[Pp]rivate/ {print $NF}' /tmp/kp.txt | tr -d '\r')
-        pub_key=$(awk '/[Pp]ublic/ {print $NF}' /tmp/kp.txt | tr -d '\r')
-        if [ -z "$priv_key" ]; then 
+        # ✅ Đổi 2>/dev/null thành 2>&1 để lấy toàn bộ output
+        /usr/local/bin/sing-box generate reality-keypair > /tmp/kp.txt 2>&1 || true
+        
+        # ✅ Dùng grep -i bắt từ khóa để tránh lỗi định dạng phiên bản
+        priv_key=$(grep -i "Private" /tmp/kp.txt | awk '{print $NF}' | tr -d '\r')
+        pub_key=$(grep -i "Public" /tmp/kp.txt | awk '{print $NF}' | tr -d '\r')
+        
+        if [ -z "$priv_key" ] || [ -z "$pub_key" ]; then 
             priv_key="mK3_Ag3X_Placeholder_Must_Be_43_Chars_Long"
             pub_key="pub_placeholder"
         fi

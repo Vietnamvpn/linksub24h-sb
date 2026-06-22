@@ -343,7 +343,7 @@ update_script() {
     fi
 }
 
-# =========================================================================
+## =========================================================================
 # HÀM CẤU HÌNH API
 # =========================================================================
 config_api_web() {
@@ -400,8 +400,13 @@ config_api_web() {
             fi
             ;;
         2)
+            # Sửa lỗi: Phải kiểm tra xem API CÓ ĐANG CHẠY không thì mới cho đẩy Node
             if [ -f "$API_CONF" ]; then
-                sync_nodes_to_web
+                if systemctl is-active --quiet node-api; then
+                    sync_nodes_to_web
+                else
+                    echo -e "${YELLOW} Lỗi: API đang bị tắt! Vui lòng chọn phím 3 để bật lại trước khi đồng bộ.${NC}"
+                fi
             else
                 echo -e "${RED} Lỗi: Chưa liên kết Web Panel! Vui lòng chọn phím 1 để liên kết.${NC}"
             fi

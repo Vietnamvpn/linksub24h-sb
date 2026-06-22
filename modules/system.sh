@@ -405,10 +405,10 @@ config_api_web() {
 }
 
 # =========================================================================
-# HÀM ĐỒNG BỘ DỮ LIỆU LÊN WEB TRUNG TÂM (ĐÃ FIX LỖI NODE)
+# HÀM ĐỒNG BỘ DỮ LIỆU LÊN WEB TRUNG TÂM (ĐÃ FIX LỖI NODE & CHỈ LẤY ADMIN)
 # =========================================================================
 sync_nodes_to_web() {
-    echo -e "${YELLOW}--> Đang xử lý và đồng bộ danh sách Node lên Web trung tâm...${NC}"
+    echo -e "${YELLOW}--> Đang xử lý và đồng bộ danh sách Node (chỉ Admin) lên Web trung tâm...${NC}"
     
     API_CONF="/usr/local/etc/sing-box/api.conf"
     CONFIG_FILE="/usr/local/etc/sing-box/config.json"
@@ -432,6 +432,14 @@ sync_nodes_to_web() {
         ukey=$(echo "$row" | cut -d'|' -f4)
         
         uname=$(echo "$ukey" | cut -d':' -f1)
+        
+        # ---------------------------------------------------------
+        # CHỈ LẤY NODE CỦA ADMIN: Nếu không phải "admin" thì bỏ qua
+        # ---------------------------------------------------------
+        if [ "$uname" != "admin" ]; then
+            continue
+        fi
+        
         uuid=$(echo "$ukey" | cut -d':' -f2)
         upass=$(echo "$ukey" | cut -d':' -f3)
         pub_k=$(echo "$ukey" | cut -d':' -f4)
@@ -477,6 +485,12 @@ sync_nodes_to_web() {
     done < <(sqlite3 "$DB_FILE" "SELECT node_type, port, domain, user_key FROM users;")
     
     JSON_DATA="${JSON_DATA}]"
+
+    # Tránh gửi request nếu mảng rỗng (không có node admin nào)
+    if [ "$JSON_DATA" == "[]" ]; then
+        echo -e "${YELLOW}--> Không tìm thấy node nào của tài khoản 'admin' để đồng bộ.${NC}"
+        return
+    fi
 
     # POST payload chuẩn lên Web Panel
     RESPONSE=$(curl -s -X POST "$API_URL" \

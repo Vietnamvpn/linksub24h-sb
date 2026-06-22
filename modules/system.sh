@@ -203,15 +203,18 @@ config_webhook() {
     CONF_FILE="/usr/local/etc/sing-box/php_url.conf"
     
     if [ -f "$CONF_FILE" ] && [ -n "$(cat "$CONF_FILE")" ]; then
-        current_url=$(cat "$CONF_FILE")
+        # Lấy URL (Hỗ trợ cả file cấu hình kiểu cũ và mới)
+        current_url=$(grep "WEB_URL=" "$CONF_FILE" | cut -d'=' -f2)
+        if [ -z "$current_url" ]; then current_url=$(cat "$CONF_FILE" | head -n 1); fi
+        
         echo -e " URL hiện tại: ${GREEN}$current_url${NC}"
         echo -e " Trạng thái: ${GREEN}Đang hoạt động${NC}"
     else
         echo -e " Trạng thái: ${YELLOW}Chưa cấu hình (Đang tắt)${NC}"
     fi
     echo -e "----------------------------------------"
-    echo -e " 1. Thêm / Thay đổi URL PHP nhận Log"
-    echo -e " 2. Xóa URL (Tắt tính năng gửi Log)"
+    echo -e " 1. Thêm / Thay đổi cấu hình PHP nhận Log"
+    echo -e " 2. Xóa cấu hình (Tắt tính năng gửi Log)"
     echo -e " 0. Quay lại Menu"
     read -p " Nhập lựa chọn (0-2): " wh_choice </dev/tty
     
@@ -219,7 +222,14 @@ config_webhook() {
         1)
             read -p " Nhập URL trang PHP (Bắt đầu bằng http:// hoặc https://): " new_url </dev/tty
             if [[ "$new_url" == http* ]]; then
-                echo "$new_url" > "$CONF_FILE"
+                read -p " Nhập cổng Port API (VD: 8083): " api_port </dev/tty
+                read -p " Nhập mã Bảo mật (Token): " api_token </dev/tty
+                
+                # Lưu cấu hình theo chuẩn Key=Value
+                echo "WEB_URL=$new_url" > "$CONF_FILE"
+                echo "PORT=$api_port" >> "$CONF_FILE"
+                echo "TOKEN=$api_token" >> "$CONF_FILE"
+                
                 systemctl restart log-forwarder
                 echo -e "${GREEN} Cập nhật thành công! Mọi log mới từ bây giờ sẽ được gửi lên web.${NC}"
             else
@@ -230,7 +240,7 @@ config_webhook() {
         2)
             rm -f "$CONF_FILE"
             systemctl restart log-forwarder
-            echo -e "${GREEN} Đã xóa URL. Tính năng gửi log đã được tắt!${NC}"
+            echo -e "${GREEN} Đã xóa cấu hình. Tính năng gửi log đã được tắt!${NC}"
             sleep 3
             ;;
         0) return ;;

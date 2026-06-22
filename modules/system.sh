@@ -202,45 +202,86 @@ config_webhook() {
     echo -e "${BLUE}        ------------------------         ${NC}"
     CONF_FILE="/usr/local/etc/sing-box/php_url.conf"
     
+    # Kiểm tra trạng thái hiện tại
     if [ -f "$CONF_FILE" ] && [ -n "$(cat "$CONF_FILE")" ]; then
         # Lấy URL (Hỗ trợ cả file cấu hình kiểu cũ và mới)
         current_url=$(grep "WEB_URL=" "$CONF_FILE" | cut -d'=' -f2)
         if [ -z "$current_url" ]; then current_url=$(cat "$CONF_FILE" | head -n 1); fi
         
         echo -e " URL hiện tại: ${GREEN}$current_url${NC}"
-        echo -e " Trạng thái: ${GREEN}Đang hoạt động${NC}"
+        
+        # Kiểm tra xem dịch vụ log có đang chạy hay không
+        if systemctl is-active --quiet log-forwarder; then
+            echo -e " Trạng thái: ${GREEN}Đang hoạt động${NC}"
+        else
+            echo -e " Trạng thái: ${YELLOW}Đang tắt (Đã lưu cấu hình)${NC}"
+        fi
     else
-        echo -e " Trạng thái: ${YELLOW}Chưa cấu hình (Đang tắt)${NC}"
+        echo -e " Trạng thái: ${RED}Chưa cấu hình${NC}"
     fi
     echo -e "----------------------------------------"
-    echo -e " 1. Thêm / Thay đổi cấu hình PHP nhận Log"
-    echo -e " 2. Xóa cấu hình (Tắt tính năng gửi Log)"
+    echo -e " 1. Thêm cấu hình PHP nhận Log mới"
+    echo -e " 2. Bật / Tắt tính năng gửi Log"
+    echo -e " 3. Xóa hoàn toàn cấu hình"
     echo -e " 0. Quay lại Menu"
-    read -p " Nhập lựa chọn (0-2): " wh_choice </dev/tty
+    read -p " Nhập lựa chọn (0-3): " wh_choice </dev/tty
     
     case $wh_choice in
         1)
-            read -p " Nhập URL trang PHP (Bắt đầu bằng http:// hoặc https://): " new_url </dev/tty
-            if [[ "$new_url" == http* ]]; then
-                read -p " Nhập cổng Port API (VD: 8083): " api_port </dev/tty
-                read -p " Nhập mã Bảo mật (Token): " api_token </dev/tty
-                
-                # Lưu cấu hình theo chuẩn Key=Value
-                echo "WEB_URL=$new_url" > "$CONF_FILE"
-                echo "PORT=$api_port" >> "$CONF_FILE"
-                echo "TOKEN=$api_token" >> "$CONF_FILE"
-                
-                systemctl restart log-forwarder
-                echo -e "${GREEN} Cập nhật thành công! Mọi log mới từ bây giờ sẽ được gửi lên web.${NC}"
+            # Kiểm tra xem cấu hình đã tồn tại chưa
+            if [ -f "$CONF_FILE" ] && [ -n "$(cat "$CONF_FILE")" ]; then
+                echo -e "${YELLOW} Lỗi: Cấu hình Webhook đã tồn tại!${NC}"
+                echo -e " Vui lòng dùng phím 3 để xóa cấu hình cũ trước khi thêm mới."
+                sleep 4
             else
-                echo -e "${RED} Lỗi: URL phải bắt đầu bằng http:// hoặc https://${NC}"
+                read -p " Nhập URL trang PHP (Bắt đầu bằng http:// hoặc https://): " new_url </dev/tty
+                if [[ "$new_url" == http* ]]; then
+                    read -p " Nhập cổng Port API (VD: 8083): " api_port </dev/tty
+                    read -p " Nhập mã Bảo mật (Token): " api_token </dev/tty
+                    
+                    # Lưu cấu hình theo chuẩn Key=Value
+                    echo "WEB_URL=$new_url" > "$CONF_FILE"
+                    echo "PORT=$api_port" >> "$CONF_FILE"
+                    echo "TOKEN=$api_token" >> "$CONF_FILE"
+                    
+                    # Bật dịch vụ
+                    systemctl enable log-forwarder &>/dev/null
+                    systemctl restart log-forwarder
+                    echo -e "${GREEN} Cập nhật thành công! Mọi log mới từ bây giờ sẽ được gửi lên web.${NC}"
+                else
+                    echo -e "${RED} Lỗi: URL phải bắt đầu bằng http:// hoặc https://${NC}"
+                fi
+                sleep 3
             fi
-            sleep 3
             ;;
         2)
-            rm -f "$CONF_FILE"
-            systemctl restart log-forwarder
-            echo -e "${GREEN} Đã xóa cấu hình. Tính năng gửi log đã được tắt!${NC}"
+            if [ ! -f "$CONF_FILE" ] || [ -z "$(cat "$CONF_FILE")" ]; then
+                echo -e "${RED} Lỗi: Chưa có cấu hình. Vui lòng chọn phím 1 để thiết lập trước!${NC}"
+                sleep 3
+            else
+                # NẾU ĐANG BẬT -> TẮT
+                if systemctl is-active --quiet log-forwarder; then
+                    systemctl stop log-forwarder
+                    echo -e "${YELLOW} Đã TẮT tính năng gửi log. (Cấu hình vẫn được giữ lại trên VPS)${NC}"
+                # NẾU ĐANG TẮT -> BẬT
+                else
+                    systemctl start log-forwarder
+                    echo -e "${GREEN} Đã BẬT LẠI tính năng gửi log!${NC}"
+                fi
+                sleep 3
+            fi
+            ;;
+        3)
+            echo -e "${RED} CẢNH BÁO: Thao tác này sẽ xóa sạch cấu hình URL, Port và Token!${NC}"
+            read -p " Bạn có chắc chắn muốn xóa không? (y/n): " confirm </dev/tty
+            
+            if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+                systemctl stop log-forwarder &>/dev/null
+                rm -f "$CONF_FILE"
+                echo -e "${GREEN} Đã xóa cấu hình và tắt hoàn toàn tính năng gửi log!${NC}"
+            else
+                echo -e "${YELLOW} Đã hủy thao tác.${NC}"
+            fi
             sleep 3
             ;;
         0) return ;;

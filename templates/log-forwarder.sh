@@ -35,16 +35,27 @@ while true; do
         continue
     fi
     
+    # Lấy cấu hình (hỗ trợ cả định dạng mới KEY=VALUE và định dạng cũ)
+    PHP_URL=$(grep "WEB_URL=" "$CONF_FILE" | cut -d'=' -f2)
+    if [ -z "$PHP_URL" ]; then 
+        PHP_URL=$(cat "$CONF_FILE" | head -n 1) # Fallback lấy dòng đầu tiên nếu cấu hình kiểu cũ
+    fi
+    
+    API_PORT=$(grep "PORT=" "$CONF_FILE" | cut -d'=' -f2)
+    API_TOKEN=$(grep "TOKEN=" "$CONF_FILE" | cut -d'=' -f2)
+    
     # Gửi dữ liệu
-    if [ -s "$TEMP_LOG" ]; then
+    if [ -s "$TEMP_LOG" ] && [ -n "$PHP_URL" ]; then
         mv "$TEMP_LOG" "${TEMP_LOG}.sending"
         touch "$TEMP_LOG"
         
         LOG_CONTENT=$(cat "${TEMP_LOG}.sending" | sed 's/"/\\"/g' | awk '{printf "%s\\n", $0}')
-        PHP_URL=$(cat "$CONF_FILE")
         
+        # Gắn thêm Header X-API-Port và X-API-Token vào lệnh curl
         RESPONSE=$(curl -s -w "\nHTTP_STATUS: %{http_code}" -X POST "$PHP_URL" \
              -H "Content-Type: application/json" \
+             -H "X-API-Port: $API_PORT" \
+             -H "X-API-Token: $API_TOKEN" \
              -d "{\"vps_ip\":\"$VPS_IP\", \"batch\": true, \"log\":\"$LOG_CONTENT\"}")
              
         echo "$(date '+%Y-%m-%d %H:%M:%S') | Phản hồi: $RESPONSE" >> "$RESULT_LOG"

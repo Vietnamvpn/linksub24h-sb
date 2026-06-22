@@ -195,100 +195,6 @@ create_swap() {
     sleep 3
 }
 
-config_webhook() {
-    clear
-    echo -e ""
-    echo -e "${BLUE}    CẤU HÌNH GỬI LOG LÊN WEB (WEBHOOK)   ${NC}"
-    echo -e "${BLUE}        ------------------------         ${NC}"
-    CONF_FILE="/usr/local/etc/sing-box/php_url.conf"
-    
-    # Kiểm tra trạng thái hiện tại
-    if [ -f "$CONF_FILE" ] && [ -n "$(cat "$CONF_FILE")" ]; then
-        # Lấy URL (Hỗ trợ cả file cấu hình kiểu cũ và mới)
-        current_url=$(grep "WEB_URL=" "$CONF_FILE" | cut -d'=' -f2)
-        if [ -z "$current_url" ]; then current_url=$(cat "$CONF_FILE" | head -n 1); fi
-        
-        echo -e " URL hiện tại: ${GREEN}$current_url${NC}"
-        
-        # Kiểm tra xem dịch vụ log có đang chạy hay không
-        if systemctl is-active --quiet log-forwarder; then
-            echo -e " Trạng thái: ${GREEN}Đang hoạt động${NC}"
-        else
-            echo -e " Trạng thái: ${YELLOW}Đang tắt (Đã lưu cấu hình)${NC}"
-        fi
-    else
-        echo -e " Trạng thái: ${RED}Chưa cấu hình${NC}"
-    fi
-    echo -e "----------------------------------------"
-    echo -e " 1. Thêm cấu hình PHP nhận Log mới"
-    echo -e " 2. Bật / Tắt tính năng gửi Log"
-    echo -e " 3. Xóa hoàn toàn cấu hình"
-    echo -e " 0. Quay lại Menu"
-    read -p " Nhập lựa chọn (0-3): " wh_choice </dev/tty
-    
-    case $wh_choice in
-        1)
-            # Kiểm tra xem cấu hình đã tồn tại chưa
-            if [ -f "$CONF_FILE" ] && [ -n "$(cat "$CONF_FILE")" ]; then
-                echo -e "${YELLOW} Lỗi: Cấu hình Webhook đã tồn tại!${NC}"
-                echo -e " Vui lòng dùng phím 3 để xóa cấu hình cũ trước khi thêm mới."
-                sleep 4
-            else
-                read -p " Nhập URL trang PHP (Bắt đầu bằng http:// hoặc https://): " new_url </dev/tty
-                if [[ "$new_url" == http* ]]; then
-                    read -p " Nhập cổng Port API (VD: 8083): " api_port </dev/tty
-                    read -p " Nhập mã Bảo mật (Token): " api_token </dev/tty
-                    
-                    # Lưu cấu hình theo chuẩn Key=Value
-                    echo "WEB_URL=$new_url" > "$CONF_FILE"
-                    echo "PORT=$api_port" >> "$CONF_FILE"
-                    echo "TOKEN=$api_token" >> "$CONF_FILE"
-                    
-                    # Bật dịch vụ
-                    systemctl enable log-forwarder &>/dev/null
-                    systemctl restart log-forwarder
-                    echo -e "${GREEN} Cập nhật thành công! Mọi log mới từ bây giờ sẽ được gửi lên web.${NC}"
-                else
-                    echo -e "${RED} Lỗi: URL phải bắt đầu bằng http:// hoặc https://${NC}"
-                fi
-                sleep 3
-            fi
-            ;;
-        2)
-            if [ ! -f "$CONF_FILE" ] || [ -z "$(cat "$CONF_FILE")" ]; then
-                echo -e "${RED} Lỗi: Chưa có cấu hình. Vui lòng chọn phím 1 để thiết lập trước!${NC}"
-                sleep 3
-            else
-                # NẾU ĐANG BẬT -> TẮT
-                if systemctl is-active --quiet log-forwarder; then
-                    systemctl stop log-forwarder
-                    echo -e "${YELLOW} Đã TẮT tính năng gửi log. (Cấu hình vẫn được giữ lại trên VPS)${NC}"
-                # NẾU ĐANG TẮT -> BẬT
-                else
-                    systemctl start log-forwarder
-                    echo -e "${GREEN} Đã BẬT LẠI tính năng gửi log!${NC}"
-                fi
-                sleep 3
-            fi
-            ;;
-        3)
-            echo -e "${RED} CẢNH BÁO: Thao tác này sẽ xóa sạch cấu hình URL, Port và Token!${NC}"
-            read -p " Bạn có chắc chắn muốn xóa không? (y/n): " confirm </dev/tty
-            
-            if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-                systemctl stop log-forwarder &>/dev/null
-                rm -f "$CONF_FILE"
-                echo -e "${GREEN} Đã xóa cấu hình và tắt hoàn toàn tính năng gửi log!${NC}"
-            else
-                echo -e "${YELLOW} Đã hủy thao tác.${NC}"
-            fi
-            sleep 3
-            ;;
-        0) return ;;
-        *) echo -e "${RED} Lựa chọn không hợp lệ!${NC}"; sleep 1 ;;
-    esac
-}
-
 uninstall_system() {
     clear
     echo -e ""
@@ -442,74 +348,95 @@ EOF
 }
 
 # =========================================================================
-# HÀM CẤU HÌNH API
+# HÀM CẤU HÌNH TÍCH HỢP (WEBHOOK LOG & API TRUNG TÂM)
 # =========================================================================
-config_api_web() {
+config_central_panel() {
     clear
-    echo -e "${BLUE}    LIÊN KẾT API VỚI WEB PANEL TRUNG TÂM   ${NC}"
-    echo -e "${BLUE}        ---------------------------------      ${NC}"
-    API_CONF="/usr/local/etc/sing-box/api.conf"
-    SERVICE_FILE="/etc/systemd/system/node-api.service"
+    echo -e ""
+    echo -e "${BLUE}  CẤU HÌNH LIÊN KẾT WEB PANEL (LOG & ĐỒNG BỘ NODE)  ${NC}"
+    echo -e "${BLUE}      --------------------------------------------      ${NC}"
     
-    # Cập nhật hiển thị trạng thái chuẩn xác
-    if systemctl is-active --quiet node-api; then
-        echo -e " Trạng thái: ${GREEN}Đang hoạt động (Đã liên kết)${NC}"
-        if [ -f "$API_CONF" ]; then
-            echo -e " Cổng API: ${GREEN}$(grep "PORT=" "$API_CONF" | cut -d'=' -f2 || true)${NC}"
-            echo -e " Link Web: ${GREEN}$(grep "WEB_URL=" "$API_CONF" | cut -d'=' -f2 || true)${NC}"
+    WH_CONF="/usr/local/etc/sing-box/php_url.conf"
+    API_CONF="/usr/local/etc/sing-box/api.conf"
+    SERVICE_API="/etc/systemd/system/node-api.service"
+    
+    # --- KIỂM TRA TRẠNG THÁI CHUNG ---
+    if [ -f "$API_CONF" ] || [ -f "$WH_CONF" ]; then
+        current_url=$(grep "WEB_URL=" "$API_CONF" 2>/dev/null | cut -d'=' -f2)
+        current_port=$(grep "PORT=" "$API_CONF" 2>/dev/null | cut -d'=' -f2)
+        
+        echo -e " Link Web: ${GREEN}$current_url${NC}"
+        echo -e " Cổng Port chung: ${GREEN}$current_port${NC}"
+        
+        # Kiểm tra API Service
+        if systemctl is-active --quiet node-api; then
+            echo -e " API Đồng bộ Node: ${GREEN}Đang hoạt động${NC}"
+        else
+            echo -e " API Đồng bộ Node: ${YELLOW}Đang tắt${NC}"
+        fi
+        
+        # Kiểm tra Webhook Service
+        if systemctl is-active --quiet log-forwarder; then
+            echo -e " Webhook Gửi Log : ${GREEN}Đang hoạt động${NC}"
+        else
+            echo -e " Webhook Gửi Log : ${YELLOW}Đang tắt${NC}"
         fi
     else
-        if [ -f "$API_CONF" ]; then
-            echo -e " Trạng thái: ${YELLOW}Đang tắt (Đã lưu cấu hình, có thể bật lại)${NC}"
-        else
-            echo -e " Trạng thái: ${RED}Chưa liên kết (Hoạt động độc lập)${NC}"
-        fi
+        echo -e " Trạng thái: ${RED}Chưa cấu hình liên kết hệ thống${NC}"
     fi
-    
     echo -e "----------------------------------------"
-    echo -e " 1. Liên kết Web Panel"
-    echo -e " 2. Đẩy Node lên Web trung tâm"
-    echo -e " 3. Bật / Tắt API"
-    echo -e " 4. Xóa cấu hình API khỏi hệ thống"
+    
+    echo -e " 1. Thiết lập Liên kết Web Panel (Chỉ nhập 1 lần)"
+    echo -e " 2. Đẩy danh sách Node lên Web trung tâm"
+    echo -e " 3. Bật / Tắt đồng loạt Dịch vụ Liên kết"
+    echo -e " 4. Xóa hoàn toàn cấu hình khỏi hệ thống"
     echo -e " 0. Quay lại Menu"
-    read -p " Nhập lựa chọn: " choice </dev/tty
+    read -p " Nhập lựa chọn (0-4): " choice </dev/tty
     
     case $choice in
         1)
-            if [ -f "$API_CONF" ]; then
-                echo -e "${YELLOW} Lỗi: Cấu hình API đã tồn tại!${NC}"
-                echo -e " Vui lòng dùng phím 3 để Bật/Tắt, hoặc phím 4 để xóa hoàn toàn trước khi thêm mới."
+            if [ -f "$API_CONF" ] || [ -f "$WH_CONF" ]; then
+                echo -e "${YELLOW} Lỗi: Cấu hình đã tồn tại!${NC}"
+                echo -e " Vui lòng dùng phím 4 để xóa cấu hình cũ trước khi thiết lập mới."
                 sleep 4
             else
-                read -p " Nhập cổng Port cho API (VD: 8083): " api_port </dev/tty
-                read -p " Nhập mã Bảo mật (Token): " api_token </dev/tty
-                read -p " Nhập URL Web trung tâm (VD: https://domain.com/api/sync): " api_web_url </dev/tty
+                echo -e "${YELLOW}--> Tiến hành cấu hình dùng chung cho toàn bộ hệ thống${NC}"
+                read -p " Nhập URL Web trung tâm (VD: https://domain.com/api): " shared_url </dev/tty
                 
-                # Kiểm tra file service trước khi lưu config
-                if [ ! -f "$SERVICE_FILE" ]; then
-                    echo -e "${RED} LỖI: Không tìm thấy file hệ thống $SERVICE_FILE!${NC}"
-                    echo -e " Có thể file này đã bị xóa. Vui lòng kiểm tra lại tiến trình cài đặt API ban đầu."
-                    sleep 4
-                    return
-                fi
-
-                # Lưu config
-                echo "PORT=$api_port" > "$API_CONF"
-                echo "TOKEN=$api_token" >> "$API_CONF"
-                echo "WEB_URL=$api_web_url" >> "$API_CONF"
-                
-                # Mở Firewall
-                ufw allow "$api_port/tcp" &>/dev/null || true
-                
-                # Bật API (hiển thị rõ nếu bị lỗi)
-                systemctl enable node-api &>/dev/null || true
-                if systemctl restart node-api; then
-                    echo -e "${GREEN} Đã khởi động API Server và mở cổng $api_port trên Firewall!${NC}"
+                if [[ "$shared_url" == http* ]]; then
+                    read -p " Nhập cổng Port dùng chung (VD: 8083): " shared_port </dev/tty
+                    read -p " Nhập mã Bảo mật (Token): " shared_token </dev/tty
+                    
+                    # 1. Lưu cấu hình Webhook (Log)
+                    echo "WEB_URL=$shared_url" > "$WH_CONF"
+                    echo "PORT=$shared_port" >> "$WH_CONF"
+                    echo "TOKEN=$shared_token" >> "$WH_CONF"
+                    
+                    # 2. Lưu cấu hình API Đồng bộ (Node)
+                    echo "PORT=$shared_port" > "$API_CONF"
+                    echo "TOKEN=$shared_token" >> "$API_CONF"
+                    echo "WEB_URL=$shared_url" >> "$API_CONF"
+                    
+                    # 3. Mở Firewall
+                    ufw allow "$shared_port/tcp" &>/dev/null || true
+                    
+                    # 4. Khởi động các dịch vụ
+                    systemctl enable log-forwarder &>/dev/null
+                    systemctl restart log-forwarder
+                    
+                    if [ -f "$SERVICE_API" ]; then
+                        systemctl enable node-api &>/dev/null || true
+                        systemctl restart node-api
+                    fi
+                    
+                    echo -e "${GREEN} Cập nhật thành công! Đã áp dụng Port, Token và Domain cho toàn hệ thống.${NC}"
+                    sleep 2
                     sync_nodes_to_web
+                    sleep 4
                 else
-                    echo -e "${RED} Lỗi: Dịch vụ API không thể khởi động! (Kiểm tra bằng lệnh: journalctl -u node-api -e)${NC}"
+                    echo -e "${RED} Lỗi: URL phải bắt đầu bằng http:// hoặc https://${NC}"
+                    sleep 3
                 fi
-                sleep 4
             fi
             ;;
         2)
@@ -525,71 +452,65 @@ config_api_web() {
             sleep 4
             ;;
         3)
-            if [ ! -f "$API_CONF" ]; then
-                echo -e "${RED} Lỗi: Chưa có cấu hình API. Vui lòng chọn phím 1 để liên kết trước!${NC}"
+            if [ ! -f "$API_CONF" ] && [ ! -f "$WH_CONF" ]; then
+                echo -e "${RED} Lỗi: Chưa có cấu hình. Vui lòng chọn phím 1 để liên kết trước!${NC}"
                 sleep 4
             else
-                api_port=$(grep "PORT=" "$API_CONF" | cut -d'=' -f2 || true)
+                shared_port=$(grep "PORT=" "$API_CONF" 2>/dev/null | cut -d'=' -f2 || true)
                 
-                # NẾU ĐANG BẬT -> CHUYỂN SANG TẮT
-                if systemctl is-active --quiet node-api; then
-                    if [ -n "$api_port" ]; then
-                        ufw delete allow "$api_port/tcp" &>/dev/null || true
-                    fi
-                    systemctl stop node-api &>/dev/null || true
-                    systemctl disable node-api &>/dev/null || true
-                    echo -e "${YELLOW} Đã TẮT API và đóng cổng $api_port (Cấu hình vẫn được giữ lại).${NC}"
-                
-                # NẾU ĐANG TẮT -> CHUYỂN SANG BẬT
-                else
-                    if [ ! -f "$SERVICE_FILE" ]; then
-                        echo -e "${RED} LỖI: Không tìm thấy file $SERVICE_FILE, không thể khởi động!${NC}"
-                        sleep 4
-                        return
-                    fi
-
-                    if [ -n "$api_port" ]; then
-                        ufw allow "$api_port/tcp" &>/dev/null || true
+                # NẾU ĐANG BẬT -> CHUYỂN SANG TẮT (Cả 2)
+                if systemctl is-active --quiet node-api || systemctl is-active --quiet log-forwarder; then
+                    if [ -n "$shared_port" ]; then
+                        ufw delete allow "$shared_port/tcp" &>/dev/null || true
                     fi
                     
-                    systemctl enable node-api &>/dev/null || true
-                    if systemctl restart node-api; then
-                        echo -e "${GREEN} Đã BẬT LẠI API và mở cổng $api_port!${NC}"
-                        sync_nodes_to_web
-                    else
-                        echo -e "${RED} Lỗi: Khởi động API thất bại! (Kiểm tra bằng lệnh: journalctl -u node-api -e)${NC}"
+                    systemctl stop log-forwarder &>/dev/null || true
+                    systemctl stop node-api &>/dev/null || true
+                    
+                    echo -e "${YELLOW} Đã TẮT API, Webhook và đóng cổng $shared_port (Cấu hình vẫn được giữ lại).${NC}"
+                
+                # NẾU ĐANG TẮT -> CHUYỂN SANG BẬT (Cả 2)
+                else
+                    if [ -n "$shared_port" ]; then
+                        ufw allow "$shared_port/tcp" &>/dev/null || true
                     fi
+                    
+                    systemctl start log-forwarder &>/dev/null || true
+                    systemctl start node-api &>/dev/null || true
+                    
+                    echo -e "${GREEN} Đã BẬT LẠI hệ thống liên kết và mở cổng $shared_port!${NC}"
                 fi
                 sleep 4
             fi
             ;;
         4)
-            echo -e "${RED} CẢNH BÁO: Thao tác này sẽ xóa sạch cấu hình và đóng cổng API!${NC}"
+            echo -e "${RED} CẢNH BÁO: Thao tác này sẽ xóa sạch cấu hình và đóng cổng API/Webhook!${NC}"
             read -p " Bạn có chắc chắn muốn xóa không? (y/n): " confirm </dev/tty
             
             if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-                if [ -f "$API_CONF" ]; then
-                    api_port=$(grep "PORT=" "$API_CONF" | cut -d'=' -f2 || true)
-                    if [ -n "$api_port" ]; then
-                        ufw delete allow "$api_port/tcp" &>/dev/null || true
-                    fi
+                shared_port=$(grep "PORT=" "$API_CONF" 2>/dev/null | cut -d'=' -f2 || true)
+                if [ -n "$shared_port" ]; then
+                    ufw delete allow "$shared_port/tcp" &>/dev/null || true
                 fi
                 
-                # Chỉ Dừng Service, KHÔNG xóa file .service nữa để tránh sập toàn hệ thống
+                # Dừng dịch vụ
+                systemctl stop log-forwarder &>/dev/null || true
+                systemctl disable log-forwarder &>/dev/null || true
                 systemctl stop node-api &>/dev/null || true
                 systemctl disable node-api &>/dev/null || true
                 
                 # Xóa sạch cấu hình
+                rm -f "$WH_CONF" || true
                 rm -f "$API_CONF" || true
                 
-                echo -e "${GREEN} Đã dọn dẹp cấu hình và tắt hoàn toàn API khỏi hệ thống!${NC}"
+                echo -e "${GREEN} Đã dọn dẹp cấu hình và ngắt liên kết hoàn toàn khỏi hệ thống!${NC}"
             else
                 echo -e "${YELLOW} Đã hủy thao tác.${NC}"
             fi
             sleep 4
             ;;
         0) return ;;
-        *) echo " Lựa chọn không hợp lệ!"; sleep 3 ;;
+        *) echo -e "${RED} Lựa chọn không hợp lệ!${NC}"; sleep 2 ;;
     esac
 }
 

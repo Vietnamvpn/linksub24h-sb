@@ -355,13 +355,15 @@ config_api_web() {
     if systemctl is-active --quiet node-api; then
         echo -e " Trạng thái: ${GREEN}Đang hoạt động (Đã liên kết)${NC}"
         echo -e " Cổng API: ${GREEN}$(grep "PORT=" "$API_CONF" | cut -d'=' -f2)${NC}"
+        echo -e " Link Web: ${GREEN}$(grep "WEB_URL=" "$API_CONF" | cut -d'=' -f2)${NC}"
     else
         echo -e " Trạng thái: ${YELLOW}Chưa liên kết (Hoạt động độc lập)${NC}"
     fi
     
     echo -e "----------------------------------------"
     echo -e " 1. Liên kết Web Panel (Khai báo Key, Port & URL)"
-    echo -e " 2. Hủy liên kết (Tắt API)"
+    echo -e " 2. Đẩy lại toàn bộ Node lên Web trung tâm"
+    echo -e " 3. Hủy liên kết (Tắt API)"
     echo -e " 0. Quay lại Menu"
     read -p " Nhập lựa chọn: " choice </dev/tty
     
@@ -386,6 +388,14 @@ config_api_web() {
             sleep 3
             ;;
         2)
+            if [ -f "$API_CONF" ]; then
+                sync_nodes_to_web
+            else
+                echo -e "${RED} Lỗi: Chưa liên kết Web Panel! Vui lòng chọn phím 1 trước.${NC}"
+            fi
+            sleep 3
+            ;;
+        3)
             systemctl stop node-api &>/dev/null && systemctl disable node-api &>/dev/null
             rm -f "$API_CONF"
             echo -e "${GREEN} Đã hủy liên kết Web Panel!${NC}"; sleep 2 ;;

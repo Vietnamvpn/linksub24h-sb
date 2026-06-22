@@ -329,7 +329,7 @@ EOF
             systemctl enable log-forwarder &>/dev/null
         fi
 
-        # Khôi phục node-api.service nếu bị mất
+        # Khôi phục node-api.service nếu bị mất.
         if [ ! -f /etc/systemd/system/node-api.service ]; then
             echo -e "${YELLOW}    [+] Phát hiện thiếu node-api.service, đang khôi phục...${NC}"
             cat << 'EOF' > /etc/systemd/system/node-api.service

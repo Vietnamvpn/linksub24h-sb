@@ -327,7 +327,7 @@ update_script() {
             # In log từ bản cũ đến bản mới (hiển thị dấu * màu xanh và nội dung commit)
             git log ${OLD_COMMIT}..${NEW_COMMIT} --pretty=format:" ${GREEN}*${NC} %s"
             
-            echo -e "\n${YELLOW}------------------------------------------------${NC}"
+            echo -e "${YELLOW}------------------------------------------------${NC}"
         else
             echo -e "${YELLOW}--> Phiên bản của bạn đã là mới nhất. Không có thay đổi nào!${NC}"
         fi

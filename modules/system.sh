@@ -352,40 +352,35 @@ config_api_web() {
     echo -e "${BLUE}        ---------------------------------      ${NC}"
     API_CONF="/usr/local/etc/sing-box/api.conf"
     
+    # Cập nhật hiển thị trạng thái logic hơn
     if systemctl is-active --quiet node-api; then
         echo -e " Trạng thái: ${GREEN}Đang hoạt động (Đã liên kết)${NC}"
         echo -e " Cổng API: ${GREEN}$(grep "PORT=" "$API_CONF" | cut -d'=' -f2)${NC}"
         echo -e " Link Web: ${GREEN}$(grep "WEB_URL=" "$API_CONF" | cut -d'=' -f2)${NC}"
     else
-        echo -e " Trạng thái: ${YELLOW}Chưa liên kết (Hoạt động độc lập)${NC}"
+        if [ -f "$API_CONF" ]; then
+            echo -e " Trạng thái: ${YELLOW}Đang tắt (Đã lưu cấu hình, có thể bật lại)${NC}"
+        else
+            echo -e " Trạng thái: ${RED}Chưa liên kết (Hoạt động độc lập)${NC}"
+        fi
     fi
     
     echo -e "----------------------------------------"
-    echo -e " 1. Liên kết Web Panel (Khai báo Key, Port & URL)"
+    echo -e " 1. Liên kết Web Panel (Khai báo Key, Port & URL mới)"
     echo -e " 2. Đẩy lại toàn bộ Node lên Web trung tâm"
-    echo -e " 3. Hủy liên kết (Tắt API & Đóng cổng bảo mật)"
+    echo -e " 3. Bật / Tắt API (Giữ nguyên cấu hình)"
     echo -e " 4. Xóa hoàn toàn API khỏi hệ thống (Gỡ cài đặt)"
     echo -e " 0. Quay lại Menu"
     read -p " Nhập lựa chọn: " choice </dev/tty
     
     case $choice in
         1)
-            # Kiểm tra xem cấu hình API đã tồn tại chưa
+            # Nếu đã có file config thì không cho nhập mới, bắt dùng phím 3 hoặc 4
             if [ -f "$API_CONF" ]; then
-                echo -e "${YELLOW} Cảnh báo: Cấu hình API đã tồn tại trên hệ thống!${NC}"
-                echo -e " Bạn không cần khai báo lại. Hệ thống sẽ tự động bật lại API."
-                echo -e " Nếu muốn cấu hình kết nối mới, vui lòng chọn phím 3 hoặc 4 để xóa cấu hình cũ trước."
-                
-                # Tự động đọc cổng cũ và bật lại
-                api_port=$(grep "PORT=" "$API_CONF" | cut -d'=' -f2)
-                if [ -n "$api_port" ]; then
-                    ufw allow "$api_port/tcp" &>/dev/null
-                fi
-                systemctl enable node-api &>/dev/null && systemctl restart node-api
-                echo -e "${GREEN} Đã bật lại API Server theo cấu hình cũ và mở cổng $api_port!${NC}"
-                sleep 4
+                echo -e "${YELLOW} Lỗi: Cấu hình API đã tồn tại!${NC}"
+                echo -e " Vui lòng dùng phím 3 để Bật/Tắt, hoặc phím 4 để xóa hoàn toàn trước khi thêm mới."
+                sleep 3
             else
-                # Nếu chưa có cấu hình thì tiến hành thêm mới
                 read -p " Nhập cổng Port cho API (VD: 8083): " api_port </dev/tty
                 read -p " Nhập mã Bảo mật (Token): " api_token </dev/tty
                 read -p " Nhập URL Web trung tâm (VD: https://domain.com/api/sync): " api_web_url </dev/tty
@@ -395,12 +390,11 @@ config_api_web() {
                 echo "TOKEN=$api_token" >> "$API_CONF"
                 echo "WEB_URL=$api_web_url" >> "$API_CONF"
                 
-                # Cấu hình hệ thống (Tự động mở cổng khi bật)
+                # Cấu hình hệ thống
                 ufw allow "$api_port/tcp" &>/dev/null
                 systemctl enable node-api &>/dev/null && systemctl restart node-api
                 echo -e "${GREEN} Đã khởi động API Server và mở cổng $api_port trên Firewall!${NC}"
                 
-                # Tự động đồng bộ ngay lập tức
                 sync_nodes_to_web
                 sleep 3
             fi
@@ -409,31 +403,44 @@ config_api_web() {
             if [ -f "$API_CONF" ]; then
                 sync_nodes_to_web
             else
-                echo -e "${RED} Lỗi: Chưa liên kết Web Panel! Vui lòng chọn phím 1 trước.${NC}"
+                echo -e "${RED} Lỗi: Chưa liên kết Web Panel! Vui lòng chọn phím 1 để liên kết.${NC}"
             fi
             sleep 3
             ;;
         3)
-            # Lấy Port để đóng Firewall trước khi xóa file config
-            if [ -f "$API_CONF" ]; then
+            # Kiểm tra xem có cấu hình để Bật/Tắt không
+            if [ ! -f "$API_CONF" ]; then
+                echo -e "${RED} Lỗi: Chưa có cấu hình API. Vui lòng chọn phím 1 để liên kết trước!${NC}"
+                sleep 3
+            else
                 api_port=$(grep "PORT=" "$API_CONF" | cut -d'=' -f2)
-                if [ -n "$api_port" ]; then
-                    ufw delete allow "$api_port/tcp" &>/dev/null
-                    echo -e "${YELLOW} Đã đóng cổng $api_port trên Firewall.${NC}"
+                
+                # NẾU ĐANG BẬT -> CHUYỂN SANG TẮT
+                if systemctl is-active --quiet node-api; then
+                    if [ -n "$api_port" ]; then
+                        ufw delete allow "$api_port/tcp" &>/dev/null
+                    fi
+                    systemctl stop node-api &>/dev/null && systemctl disable node-api &>/dev/null
+                    echo -e "${YELLOW} Đã TẮT API và đóng cổng $api_port (Cấu hình vẫn được giữ lại).${NC}"
+                
+                # NẾU ĐANG TẮT -> CHUYỂN SANG BẬT
+                else
+                    if [ -n "$api_port" ]; then
+                        ufw allow "$api_port/tcp" &>/dev/null
+                    fi
+                    systemctl enable node-api &>/dev/null && systemctl restart node-api
+                    echo -e "${GREEN} Đã BẬT LẠI API và mở cổng $api_port!${NC}"
+                    sync_nodes_to_web
                 fi
+                sleep 3
             fi
-            
-            systemctl stop node-api &>/dev/null && systemctl disable node-api &>/dev/null
-            rm -f "$API_CONF"
-            echo -e "${GREEN} Đã hủy liên kết Web Panel và tắt API!${NC}"
-            sleep 2 
             ;;
         4)
             echo -e "${RED} CẢNH BÁO: Thao tác này sẽ gỡ bỏ hoàn toàn API khỏi máy chủ!${NC}"
             read -p " Bạn có chắc chắn muốn gỡ cài đặt không? (y/n): " confirm </dev/tty
             
             if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-                # 1. Đóng cổng tường lửa
+                # Đóng cổng tường lửa
                 if [ -f "$API_CONF" ]; then
                     api_port=$(grep "PORT=" "$API_CONF" | cut -d'=' -f2)
                     if [ -n "$api_port" ]; then
@@ -441,17 +448,14 @@ config_api_web() {
                     fi
                 fi
                 
-                # 2. Dừng và xóa Service hệ thống
+                # Xóa Service
                 systemctl stop node-api &>/dev/null
                 systemctl disable node-api &>/dev/null
                 rm -f /etc/systemd/system/node-api.service
                 systemctl daemon-reload
                 
-                # 3. Xóa các file cấu hình
+                # Xóa sạch cấu hình
                 rm -f "$API_CONF"
-                
-                # CHÚ Ý: Nếu bạn có file chạy của API (vd: file binary, file script py/js), hãy thêm lệnh xóa ở đây. 
-                # Ví dụ: rm -f /usr/local/bin/node-api
                 
                 echo -e "${GREEN} Đã gỡ cài đặt và dọn dẹp hoàn toàn API khỏi hệ thống!${NC}"
             else

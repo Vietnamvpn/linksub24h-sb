@@ -200,14 +200,47 @@ add_single_node_menu() {
 }
 
 delete_node() {
-    read -p "Nhập số Cổng (Port) của node muốn xóa: " del_port </dev/tty
-    jq "del(.inbounds[] | select(.listen_port == $del_port))" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
-    ufw delete allow $del_port/udp &>/dev/null
-    ufw delete allow $del_port/tcp &>/dev/null
-    sqlite3 $DB_FILE "DELETE FROM users WHERE port=$del_port;"
-    systemctl restart sing-box
-    echo -e "${GREEN}--> Đã dọn sạch cổng $del_port!${NC}"
-    sleep 3
+    read -p "Nhập số Cổng (Port) của node muốn xóa (Bỏ trống và nhấn Enter để xóa TẤT CẢ): " del_port </dev/tty
+    
+    if [ -z "$del_port" ]; then
+        # CẢNH BÁO: Thêm bước xác nhận để tránh lỡ tay bấm nhầm Enter
+        read -p "Bạn có chắc chắn muốn xóa TẤT CẢ các node không? (y/n): " confirm </dev/tty
+        if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+            echo "Đã hủy thao tác xóa toàn bộ."
+            sleep 2
+            return
+        fi
+        
+        echo "Đang tiến hành dọn dẹp toàn bộ node..."
+        # Lấy danh sách tất cả các port hiện có từ Database
+        ports=$(sqlite3 $DB_FILE "SELECT port FROM users;")
+        
+        if [ -n "$ports" ]; then
+            for p in $ports; do
+                # Xóa cấu hình JSON của từng port
+                jq "del(.inbounds[] | select(.listen_port == $p))" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
+                # Xóa rule tường lửa
+                ufw delete allow $p/udp &>/dev/null
+                ufw delete allow $p/tcp &>/dev/null
+            done
+        fi
+        
+        # Dọn sạch toàn bộ dữ liệu trong bảng users
+        sqlite3 $DB_FILE "DELETE FROM users;"
+        
+        systemctl restart sing-box
+        echo -e "${GREEN}--> Đã dọn sạch TẤT CẢ các node đang có!${NC}"
+        sleep 3
+    else
+        # Logic giữ nguyên: Xóa 1 node cụ thể
+        jq "del(.inbounds[] | select(.listen_port == $del_port))" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
+        ufw delete allow $del_port/udp &>/dev/null
+        ufw delete allow $del_port/tcp &>/dev/null
+        sqlite3 $DB_FILE "DELETE FROM users WHERE port=$del_port;"
+        systemctl restart sing-box
+        echo -e "${GREEN}--> Đã dọn sạch cổng $del_port!${NC}"
+        sleep 3
+    fi
 }
 
 update_node_config() {

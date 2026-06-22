@@ -543,7 +543,7 @@ config_api_web() {
 }
 
 # =========================================================================
-# HÀM ĐỒNG BỘ DỮ LIỆU LÊN WEB TRUNG TÂM (ĐÃ FIX LỖI NODE, LỌC ADMIN & GẮN TAG QUỐC GIA)
+# HÀM ĐỒNG BỘ DỮ LIỆU LÊN WEB TRUNG TÂM (ĐÃ CHUẨN HÓA BẢO MẬT API KEY)
 # =========================================================================
 sync_nodes_to_web() {
     echo -e "${YELLOW}--> Đang xử lý và đồng bộ danh sách Node (chỉ Admin, có gắn tag Quốc gia) lên Web trung tâm...${NC}"
@@ -552,22 +552,23 @@ sync_nodes_to_web() {
     CONFIG_FILE="/usr/local/etc/sing-box/config.json"
     DB_FILE="/usr/local/etc/sing-box/proxy_data.db"
     
+    # Bổ sung việc lấy biến PORT từ file config
+    API_PORT=$(grep "PORT=" "$API_CONF" | cut -d'=' -f2)
     API_URL=$(grep "WEB_URL=" "$API_CONF" | cut -d'=' -f2)
     API_TOKEN=$(grep "TOKEN=" "$API_CONF" | cut -d'=' -f2)
 
-    if [ -z "$API_URL" ] || [ -z "$API_TOKEN" ]; then
-        echo -e "${RED} [LỖI] Chưa cấu hình WEB_URL hoặc TOKEN trong api.conf!${NC}"
+    # Ràng buộc phải có đủ 3 yếu tố mới cho chạy tiếp
+    if [ -z "$API_URL" ] || [ -z "$API_TOKEN" ] || [ -z "$API_PORT" ]; then
+        echo -e "${RED} [LỖI] Chưa cấu hình PORT, WEB_URL hoặc TOKEN trong api.conf!${NC}"
         return
     fi
 
     JSON_DATA="["
     
-    # Biến phục vụ việc đánh số và lấy thông tin quốc gia
     NODE_COUNT=1
     LAST_DOM=""
     COUNTRY_CACHE="Unknown"
     
-    # Đọc và bóc tách từng dòng từ Database y hệt như lúc export link
     while read -r row; do
         ntype=$(echo "$row" | cut -d'|' -f1)
         port=$(echo "$row" | cut -d'|' -f2)
@@ -576,7 +577,6 @@ sync_nodes_to_web() {
         
         uname=$(echo "$ukey" | cut -d':' -f1)
         
-        # CHỈ LẤY NODE CỦA ADMIN
         if [ "$uname" != "admin" ]; then
             continue
         fi
@@ -586,15 +586,10 @@ sync_nodes_to_web() {
         pub_k=$(echo "$ukey" | cut -d':' -f4)
         db_sni=$(echo "$ukey" | cut -d':' -f5)
         
-        # ---------------------------------------------------------
-        # XỬ LÝ LẤY QUỐC GIA TỪ IP/DOMAIN (CÓ CACHE ĐỂ TỐI ƯU TỐC ĐỘ)
-        # ---------------------------------------------------------
         if [ "$dom" != "$LAST_DOM" ]; then
-            # Timeout 5s để tránh treo script nếu mạng lỗi
             COUNTRY_RAW=$(curl -s -m 5 "http://ip-api.com/line/$dom?fields=country" 2>/dev/null)
             
             if [ -n "$COUNTRY_RAW" ] && [ "$COUNTRY_RAW" != "fail" ]; then
-                # Thay khoảng trắng bằng dấu gạch dưới (VD: United States -> United_States)
                 COUNTRY_CACHE=$(echo "$COUNTRY_RAW" | tr ' ' '_')
             else
                 COUNTRY_CACHE="Unknown"
@@ -602,19 +597,16 @@ sync_nodes_to_web() {
             LAST_DOM="$dom"
         fi
         
-        # Format số thứ tự thành 2 chữ số (01, 02...) và tạo Tag Name
         FORMATTED_COUNT=$(printf "%02d" $NODE_COUNT)
         TAG_NAME="${COUNTRY_CACHE}-${FORMATTED_COUNT}"
         ((NODE_COUNT++))
         
-        # Fallback lấy SNI từ config.json nếu DB không có
         if [ -z "$db_sni" ]; then
             sni=$(jq -r ".inbounds[] | select(.listen_port == $port) | .tls.server_name // \"bing.com\"" "$CONFIG_FILE" 2>/dev/null)
         else
             sni=$db_sni
         fi
         
-        # Build URL Node hoàn chỉnh (Gắn thêm #TAG_NAME ở cuối link để hiển thị đẹp trên App client)
         node_link=""
         if [ "$ntype" == "hysteria2" ]; then
             node_link="hysteria2://$upass@$dom:$port?insecure=1&sni=$sni#$TAG_NAME"
@@ -624,7 +616,6 @@ sync_nodes_to_web() {
             node_link="vless://$uuid@$dom:$port?security=reality&encryption=none&pbk=$pub_k&headerType=none&fp=chrome&spx=%2F&type=grpc&sni=$sni&serviceName=vless-grpc&sid=0123456789abcdef#$TAG_NAME"
         fi
         
-        # Đóng gói JSON an toàn bằng jq, thêm trường name để Web Panel nhận dạng
         JSON_OBJ=$(jq -n \
             --arg name "$TAG_NAME" \
             --arg type "$ntype" \
@@ -638,7 +629,6 @@ sync_nodes_to_web() {
             --arg link "$node_link" \
             '{name: $name, node_type: $type, port: $port, domain: $domain, username: $uname, uuid: $uuid, password: $password, sni: $sni, pub_k: $pub_k, link: $link}')
         
-        # Nối vào mảng JSON
         if [ "$JSON_DATA" == "[" ]; then
             JSON_DATA="${JSON_DATA}${JSON_OBJ}"
         else
@@ -649,19 +639,19 @@ sync_nodes_to_web() {
     
     JSON_DATA="${JSON_DATA}]"
 
-    # Tránh gửi request nếu mảng rỗng
     if [ "$JSON_DATA" == "[]" ]; then
         echo -e "${YELLOW}--> Không tìm thấy node nào của tài khoản 'admin' để đồng bộ.${NC}"
         return
     fi
 
-    # POST payload chuẩn lên Web Panel
+    # Đã cập nhật Header mang theo Port và Token để khớp với PHP receiver
+    # Đã sửa lại định dạng JSON đẩy lên chỉ bao gồm "nodes"
     RESPONSE=$(curl -s -X POST "$API_URL" \
          -H "Content-Type: application/json" \
-         -H "Authorization: Bearer $API_TOKEN" \
-         -d "{\"admin\": \"admin\", \"nodes\": $JSON_DATA}")
+         -H "X-API-Port: $API_PORT" \
+         -H "X-API-Token: $API_TOKEN" \
+         -d "{\"nodes\": $JSON_DATA}")
 
-    # Log kết quả
     if [[ "$RESPONSE" == *"success"* ]] || [ $? -eq 0 ]; then
         echo -e "${GREEN}--> Đã đồng bộ chi tiết Node lên Web thành công!${NC}"
     else

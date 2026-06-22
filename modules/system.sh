@@ -39,7 +39,7 @@ check_and_update_system() {
     echo -e "${GREEN}---------------------------------------------------------${NC}"
     
     echo -e "${YELLOW}--> Cấu hình đáp ứng yêu cầu. Đang tự động chuyển sang cài đặt lõi...${NC}"
-    sleep 2
+    sleep 3
     
     install_core
 }
@@ -140,7 +140,7 @@ EOF
     # =========================================================================
     
     echo -e "${GREEN}--> HOÀN TẤT THIẾT LẬP LÕI! Chuẩn bị chuyển sang cài đặt Node...${NC}"
-    sleep 2
+    sleep 3
     
     node_wizard_initial
 }
@@ -176,7 +176,7 @@ create_swap() {
     read -p " Nhập dung lượng SWAP muốn tạo (Ví dụ: 1 hoặc 2 tương ứng 1GB/2GB, hoặc 0 để hủy): " swap_size </dev/tty
     if [ "$swap_size" == "0" ] || [ -z "$swap_size" ]; then
         echo -e "${YELLOW} Đã hủy thao tác cấu hình SWAP.${NC}"
-        sleep 2
+        sleep 3
         return
     fi
     
@@ -386,7 +386,7 @@ EOF
         exec vvc
     else
         echo -e "${RED} Cập nhật thất bại! Vui lòng kiểm tra kết nối Github.${NC}"
-        sleep 3
+        sleep 4
     fi
 }
 
@@ -416,9 +416,9 @@ config_api_web() {
     fi
     
     echo -e "----------------------------------------"
-    echo -e " 1. Liên kết Web Panel (Khai báo Key, Port & URL mới)"
-    echo -e " 2. Đẩy lại toàn bộ Node lên Web trung tâm"
-    echo -e " 3. Bật / Tắt API (Giữ nguyên cấu hình)"
+    echo -e " 1. Liên kết Web Panel"
+    echo -e " 2. Đẩy Node lên Web trung tâm"
+    echo -e " 3. Bật / Tắt API"
     echo -e " 4. Xóa cấu hình API khỏi hệ thống"
     echo -e " 0. Quay lại Menu"
     read -p " Nhập lựa chọn: " choice </dev/tty
@@ -428,7 +428,7 @@ config_api_web() {
             if [ -f "$API_CONF" ]; then
                 echo -e "${YELLOW} Lỗi: Cấu hình API đã tồn tại!${NC}"
                 echo -e " Vui lòng dùng phím 3 để Bật/Tắt, hoặc phím 4 để xóa hoàn toàn trước khi thêm mới."
-                sleep 3
+                sleep 4
             else
                 read -p " Nhập cổng Port cho API (VD: 8083): " api_port </dev/tty
                 read -p " Nhập mã Bảo mật (Token): " api_token </dev/tty
@@ -458,7 +458,7 @@ config_api_web() {
                 else
                     echo -e "${RED} Lỗi: Dịch vụ API không thể khởi động! (Kiểm tra bằng lệnh: journalctl -u node-api -e)${NC}"
                 fi
-                sleep 3
+                sleep 4
             fi
             ;;
         2)
@@ -471,12 +471,12 @@ config_api_web() {
             else
                 echo -e "${RED} Lỗi: Chưa liên kết Web Panel! Vui lòng chọn phím 1 để liên kết.${NC}"
             fi
-            sleep 3
+            sleep 4
             ;;
         3)
             if [ ! -f "$API_CONF" ]; then
                 echo -e "${RED} Lỗi: Chưa có cấu hình API. Vui lòng chọn phím 1 để liên kết trước!${NC}"
-                sleep 3
+                sleep 4
             else
                 api_port=$(grep "PORT=" "$API_CONF" | cut -d'=' -f2 || true)
                 
@@ -509,7 +509,7 @@ config_api_web() {
                         echo -e "${RED} Lỗi: Khởi động API thất bại! (Kiểm tra bằng lệnh: journalctl -u node-api -e)${NC}"
                     fi
                 fi
-                sleep 3
+                sleep 4
             fi
             ;;
         4)
@@ -535,10 +535,10 @@ config_api_web() {
             else
                 echo -e "${YELLOW} Đã hủy thao tác.${NC}"
             fi
-            sleep 2
+            sleep 4
             ;;
         0) return ;;
-        *) echo " Lựa chọn không hợp lệ!"; sleep 1 ;;
+        *) echo " Lựa chọn không hợp lệ!"; sleep 3 ;;
     esac
 }
 

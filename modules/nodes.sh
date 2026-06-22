@@ -145,20 +145,40 @@ add_single_node_menu() {
     prompt_node_config $proto
     
     echo -e "----------------------------------------"
-    read -p " Nhập Username dành riêng cho Node mới này: " uname </dev/tty
-    upass=$(tr -dc 'a-zA-Z0-9' </dev/urandom | head -c 10)
-    echo -e " Mật khẩu (Password) tự động tạo cho Node này: ${GREEN}$upass${NC}"
-    uuid_gen=$(cat /proc/sys/kernel/random/uuid)
+    echo -e "Tùy chọn cấp phát User cho Node mới:"
+    echo -e "1) Chỉ tạo và thêm 1 User mới"
+    echo -e "2) Thêm TẤT CẢ User đang có trong hệ thống vào Node này"
+    read -p "Chọn (1-2): " user_choice </dev/tty
+
+    users_list=()
+    if [ "$user_choice" == "2" ]; then
+        # Lấy danh sách tất cả username hiện có từ DB (cắt chuỗi trước dấu ':' đầu tiên và lọc trùng lặp)
+        existing_users=$(sqlite3 $DB_FILE "SELECT user_key FROM users;" | awk -F':' '{print $1}' | sort -u)
+        
+        if [ -z "$existing_users" ]; then
+            echo -e "${YELLOW}Không tìm thấy user nào trong Database. Tự động chuyển về chế độ thêm 1 user mới.${NC}"
+            user_choice="1"
+        else
+            for u in $existing_users; do
+                users_list+=("$u")
+            done
+            echo -e "${GREEN}-> Đã tìm thấy ${#users_list[@]} user trong hệ thống.${NC}"
+        fi
+    fi
+
+    # Nếu người dùng chọn 1 hoặc hệ thống không có user nào để quét
+    if [ "$user_choice" == "1" ]; then
+        read -p " Nhập Username dành riêng cho Node mới này: " uname </dev/tty
+        users_list+=("$uname")
+    fi
     
     port=$RET_PORT
     dom=$RET_DOM
     sni=$RET_SNI
     range=$RET_RANGE
-    
-    safe_uname=$(echo "$uname" | sed "s/'/''/g")
-    safe_upass=$(echo "$upass" | sed "s/'/''/g")
     safe_dom=$(echo "$dom" | sed "s/'/''/g")
-    
+
+    # Mở port trên UFW và thiết lập Port Hopping (nếu có)
     ufw allow $port/udp &>/dev/null
     ufw allow $port/tcp &>/dev/null
     if [ ! -z "$range" ]; then
@@ -170,18 +190,10 @@ add_single_node_menu() {
         echo "exit 0" >> /etc/rc.local
         /etc/rc.local
     fi
-    
-    if [ "$proto" == "hysteria2" ]; then
-        jq ".inbounds += [{\"type\": \"hysteria2\", \"tag\": \"hy2-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": [{\"name\": \"$uname\", \"password\": \"$upass\"}], \"tls\": {\"enabled\": true, \"certificate_path\": \"$CONFIG_DIR/cert.pem\", \"key_path\": \"$CONFIG_DIR/private.key\", \"server_name\": \"$sni\"}}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
-        sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('hysteria2', $port, '$safe_dom', '$safe_uname::$safe_upass::');"
-    elif [ "$proto" == "tuic" ]; then
-        jq ".inbounds += [{\"type\": \"tuic\", \"tag\": \"tuic-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": [{\"uuid\": \"$uuid_gen\", \"password\": \"$upass\"}], \"congestion_control\": \"bbr\", \"tls\": {\"enabled\": true, \"certificate_path\": \"$CONFIG_DIR/cert.pem\", \"key_path\": \"$CONFIG_DIR/private.key\", \"alpn\": [\"h3\"], \"server_name\": \"$sni\"}}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
-        sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('tuic', $port, '$safe_dom', '$safe_uname:$uuid_gen:$safe_upass::');"
-    elif [ "$proto" == "vless" ]; then
-        # ✅ Đổi 2>/dev/null thành 2>&1 để lấy toàn bộ output
+
+    # KHỞI TẠO KEYPAIR VLESS (Chỉ cần tạo 1 lần cho mỗi Node/Cổng)
+    if [ "$proto" == "vless" ]; then
         /usr/local/bin/sing-box generate reality-keypair > /tmp/kp.txt 2>&1 || true
-        
-        # ✅ Dùng grep -i bắt từ khóa để tránh lỗi định dạng phiên bản
         priv_key=$(grep -i "Private" /tmp/kp.txt | awk '{print $NF}' | tr -d '\r')
         pub_key=$(grep -i "Public" /tmp/kp.txt | awk '{print $NF}' | tr -d '\r')
         
@@ -190,12 +202,50 @@ add_single_node_menu() {
             pub_key="pub_placeholder"
         fi
         rm -f /tmp/kp.txt
-        jq ".inbounds += [{\"type\": \"vless\", \"tag\": \"vless-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": [{\"uuid\": \"$uuid_gen\", \"name\": \"$uname\"}], \"tls\": {\"enabled\": true, \"server_name\": \"$sni\", \"reality\": {\"enabled\": true, \"handshake\": {\"server\": \"$sni\", \"server_port\": 443}, \"private_key\": \"$priv_key\", \"short_id\": [\"0123456789abcdef\"]}}, \"transport\": {\"type\": \"grpc\", \"service_name\": \"vless-grpc\"}}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
-        sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('vless', $port, '$safe_dom', '$safe_uname:$uuid_gen::$pub_key:$sni');"
+    fi
+
+    # CHUẨN BỊ MẢNG JSON CHO USERS
+    jq_users_array="[]"
+    echo -e "\nĐang thiết lập cấu hình cho các user..."
+    
+    # Vòng lặp cấp phát thông số cho từng user
+    for uname in "${users_list[@]}"; do
+        upass=$(tr -dc 'a-zA-Z0-9' </dev/urandom | head -c 10)
+        uuid_gen=$(cat /proc/sys/kernel/random/uuid)
+        
+        safe_uname=$(echo "$uname" | sed "s/'/''/g")
+        safe_upass=$(echo "$upass" | sed "s/'/''/g")
+
+        if [ "$user_choice" == "1" ]; then
+            echo -e " Mật khẩu (Password) tự động tạo cho Node này: ${GREEN}$upass${NC}"
+        fi
+
+        # Cập nhật mảng JSON và lưu vào Database theo từng giao thức
+        if [ "$proto" == "hysteria2" ]; then
+            jq_users_array=$(echo "$jq_users_array" | jq ". += [{\"name\": \"$uname\", \"password\": \"$upass\"}]")
+            sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('hysteria2', $port, '$safe_dom', '$safe_uname::$safe_upass::');"
+        
+        elif [ "$proto" == "tuic" ]; then
+            jq_users_array=$(echo "$jq_users_array" | jq ". += [{\"uuid\": \"$uuid_gen\", \"password\": \"$upass\"}]")
+            sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('tuic', $port, '$safe_dom', '$safe_uname:$uuid_gen:$safe_upass::');"
+        
+        elif [ "$proto" == "vless" ]; then
+            jq_users_array=$(echo "$jq_users_array" | jq ". += [{\"uuid\": \"$uuid_gen\", \"name\": \"$uname\"}]")
+            sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('vless', $port, '$safe_dom', '$safe_uname:$uuid_gen::$pub_key:$sni');"
+        fi
+    done
+
+    # INJECT MẢNG USERS VÀO FILE CONFIG TỔNG
+    if [ "$proto" == "hysteria2" ]; then
+        jq --argjson users "$jq_users_array" ".inbounds += [{\"type\": \"hysteria2\", \"tag\": \"hy2-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": \$users, \"tls\": {\"enabled\": true, \"certificate_path\": \"$CONFIG_DIR/cert.pem\", \"key_path\": \"$CONFIG_DIR/private.key\", \"server_name\": \"$sni\"}}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
+    elif [ "$proto" == "tuic" ]; then
+        jq --argjson users "$jq_users_array" ".inbounds += [{\"type\": \"tuic\", \"tag\": \"tuic-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": \$users, \"congestion_control\": \"bbr\", \"tls\": {\"enabled\": true, \"certificate_path\": \"$CONFIG_DIR/cert.pem\", \"key_path\": \"$CONFIG_DIR/private.key\", \"alpn\": [\"h3\"], \"server_name\": \"$sni\"}}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
+    elif [ "$proto" == "vless" ]; then
+        jq --argjson users "$jq_users_array" ".inbounds += [{\"type\": \"vless\", \"tag\": \"vless-$port\", \"listen\": \"::\", \"listen_port\": $port, \"users\": \$users, \"tls\": {\"enabled\": true, \"server_name\": \"$sni\", \"reality\": {\"enabled\": true, \"handshake\": {\"server\": \"$sni\", \"server_port\": 443}, \"private_key\": \"$priv_key\", \"short_id\": [\"0123456789abcdef\"]}}, \"transport\": {\"type\": \"grpc\", \"service_name\": \"vless-grpc\"}}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
     fi
     
     systemctl restart sing-box
-    echo -e "${GREEN} Thêm Node độc lập hoàn tất! Không ảnh hưởng tới các Node cũ.${NC}"
+    echo -e "${GREEN} Thêm Node độc lập hoàn tất! Đã cập nhật thành công ${#users_list[@]} user vào cổng $port.${NC}"
     sleep 3
 }
 

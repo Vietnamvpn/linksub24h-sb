@@ -344,41 +344,6 @@ update_script() {
 }
 
 # =========================================================================
-# HÀM ĐỒNG BỘ DỮ LIỆU LÊN WEB TRUNG TÂM
-# =========================================================================
-sync_nodes_to_web() {
-    echo -e "${YELLOW}--> Đang đồng bộ danh sách người dùng lên Web trung tâm...${NC}"
-    
-    API_CONF="/usr/local/etc/sing-box/api.conf"
-    DB_FILE="/usr/local/etc/sing-box/proxy_data.db"
-    
-    # Lấy thông tin từ file config
-    API_URL=$(grep "WEB_URL=" "$API_CONF" | cut -d'=' -f2)
-    API_TOKEN=$(grep "TOKEN=" "$API_CONF" | cut -d'=' -f2)
-
-    if [ -z "$API_URL" ] || [ -z "$API_TOKEN" ]; then
-        echo -e "${RED} [LỖI] Thông tin Web URL hoặc Token chưa được lưu!${NC}"
-        return
-    fi
-
-    # Lấy dữ liệu từ SQLite (giả sử bảng là 'users', các cột là user_key, port, node_type)
-    # Dùng jq để tạo format JSON chuẩn
-    JSON_DATA=$(sqlite3 "$DB_FILE" "SELECT json_object('user_key', user_key, 'port', port, 'node_type', node_type) FROM users;" | jq -s '.')
-
-    # Gửi lên Web trung tâm
-    RESPONSE=$(curl -s -X POST "$API_URL" \
-         -H "Content-Type: application/json" \
-         -H "Authorization: Bearer $API_TOKEN" \
-         -d "{\"admin\": \"admin\", \"nodes\": $JSON_DATA}")
-
-    if [[ "$RESPONSE" == *"success"* ]]; then
-        echo -e "${GREEN}--> Đã đẩy dữ liệu lên Web thành công!${NC}"
-    else
-        echo -e "${RED}--> Lỗi: Web trung tâm không phản hồi hoặc dữ liệu sai định dạng.${NC}"
-    fi
-}
-
-# =========================================================================
 # HÀM CẤU HÌNH API
 # =========================================================================
 config_api_web() {
@@ -429,34 +394,90 @@ config_api_web() {
     esac
 }
 
+# =========================================================================
+# HÀM ĐỒNG BỘ DỮ LIỆU LÊN WEB TRUNG TÂM (ĐÃ FIX LỖI NODE)
+# =========================================================================
 sync_nodes_to_web() {
-    echo -e "${YELLOW}--> Đang đồng bộ danh sách Node lên Web trung tâm...${NC}"
+    echo -e "${YELLOW}--> Đang xử lý và đồng bộ danh sách Node lên Web trung tâm...${NC}"
     
-    # 1. Đọc thông tin API từ file
     API_CONF="/usr/local/etc/sing-box/api.conf"
-    API_URL=$(grep "WEB_URL=" "$API_CONF" | cut -d'=' -f2) # Bạn cần thêm dòng WEB_URL vào api.conf
+    CONFIG_FILE="/usr/local/etc/sing-box/config.json"
+    DB_FILE="/usr/local/etc/sing-box/proxy_data.db"
+    
+    API_URL=$(grep "WEB_URL=" "$API_CONF" | cut -d'=' -f2)
     API_TOKEN=$(grep "TOKEN=" "$API_CONF" | cut -d'=' -f2)
 
-    if [ -z "$API_URL" ]; then
-        echo -e "${RED} [LỖI] Chưa cấu hình WEB_URL trong api.conf!${NC}"
+    if [ -z "$API_URL" ] || [ -z "$API_TOKEN" ]; then
+        echo -e "${RED} [LỖI] Chưa cấu hình WEB_URL hoặc TOKEN trong api.conf!${NC}"
         return
     fi
 
-    # 2. Lấy dữ liệu từ SQLite và convert sang JSON
-    # Giả sử bạn muốn gửi: node_type, port, domain, user_key
-    # Dùng sqlite3 kết hợp với jq để tạo JSON
-    JSON_DATA=$(sqlite3 /usr/local/etc/sing-box/proxy_data.db "SELECT json_object('node_type', node_type, 'port', port, 'domain', domain, 'user_key', user_key) FROM users;" | jq -s '.')
+    JSON_DATA="["
     
-    # 3. Gửi lên web trung tâm
-    # Bạn gửi kèm tên 'admin' như yêu cầu
-    curl -s -X POST "$API_URL" \
+    # Đọc và bóc tách từng dòng từ Database y hệt như lúc export link
+    while read -r row; do
+        ntype=$(echo "$row" | cut -d'|' -f1)
+        port=$(echo "$row" | cut -d'|' -f2)
+        dom=$(echo "$row" | cut -d'|' -f3)
+        ukey=$(echo "$row" | cut -d'|' -f4)
+        
+        uname=$(echo "$ukey" | cut -d':' -f1)
+        uuid=$(echo "$ukey" | cut -d':' -f2)
+        upass=$(echo "$ukey" | cut -d':' -f3)
+        pub_k=$(echo "$ukey" | cut -d':' -f4)
+        db_sni=$(echo "$ukey" | cut -d':' -f5)
+        
+        # Fallback lấy SNI từ config.json nếu DB không có
+        if [ -z "$db_sni" ]; then
+            sni=$(jq -r ".inbounds[] | select(.listen_port == $port) | .tls.server_name // \"bing.com\"" "$CONFIG_FILE" 2>/dev/null)
+        else
+            sni=$db_sni
+        fi
+        
+        # Build URL Node hoàn chỉnh để API Web dễ dàng sử dụng
+        node_link=""
+        if [ "$ntype" == "hysteria2" ]; then
+            node_link="hysteria2://$upass@$dom:$port?insecure=1&sni=$sni"
+        elif [ "$ntype" == "tuic" ]; then
+            node_link="tuic://$uuid:$upass@$dom:$port?congestion_control=bbr&udp_relay_mode=native&alpn=h3&sni=$sni&allow_insecure=1"
+        elif [ "$ntype" == "vless" ]; then
+            node_link="vless://$uuid@$dom:$port?security=reality&encryption=none&pbk=$pub_k&headerType=none&fp=chrome&spx=%2F&type=grpc&sni=$sni&serviceName=vless-grpc&sid=0123456789abcdef"
+        fi
+        
+        # Đóng gói JSON an toàn bằng jq, chống lỗi escape nháy kép
+        JSON_OBJ=$(jq -n \
+            --arg type "$ntype" \
+            --arg port "$port" \
+            --arg domain "$dom" \
+            --arg uname "$uname" \
+            --arg uuid "$uuid" \
+            --arg password "$upass" \
+            --arg sni "$sni" \
+            --arg pub_k "$pub_k" \
+            --arg link "$node_link" \
+            '{node_type: $type, port: $port, domain: $domain, username: $uname, uuid: $uuid, password: $password, sni: $sni, pub_k: $pub_k, link: $link}')
+        
+        # Nối vào mảng JSON
+        if [ "$JSON_DATA" == "[" ]; then
+            JSON_DATA="${JSON_DATA}${JSON_OBJ}"
+        else
+            JSON_DATA="${JSON_DATA},${JSON_OBJ}"
+        fi
+        
+    done < <(sqlite3 "$DB_FILE" "SELECT node_type, port, domain, user_key FROM users;")
+    
+    JSON_DATA="${JSON_DATA}]"
+
+    # POST payload chuẩn lên Web Panel
+    RESPONSE=$(curl -s -X POST "$API_URL" \
          -H "Content-Type: application/json" \
          -H "Authorization: Bearer $API_TOKEN" \
-         -d "{\"admin\": \"admin\", \"nodes\": $JSON_DATA}" &>/dev/null
+         -d "{\"admin\": \"admin\", \"nodes\": $JSON_DATA}")
 
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}--> Đã đẩy dữ liệu lên Web thành công!${NC}"
+    # Log kết quả
+    if [[ "$RESPONSE" == *"success"* ]] || [ $? -eq 0 ]; then
+        echo -e "${GREEN}--> Đã đồng bộ chi tiết Node lên Web thành công!${NC}"
     else
-        echo -e "${RED}--> Lỗi kết nối đến Web trung tâm.${NC}"
+        echo -e "${RED}--> Lỗi kết nối Web trung tâm. Phản hồi API: $RESPONSE${NC}"
     fi
 }

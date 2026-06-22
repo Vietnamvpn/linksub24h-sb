@@ -348,7 +348,7 @@ update_script() {
 # =========================================================================
 config_api_web() {
     clear
-    echo -e "\n${BLUE}    LIÊN KẾT API VỚI WEB PANEL TRUNG TÂM   ${NC}\n"
+    echo -e "${BLUE}    LIÊN KẾT API VỚI WEB PANEL TRUNG TÂM   ${NC}"
     echo -e "${BLUE}        ---------------------------------      ${NC}"
     API_CONF="/usr/local/etc/sing-box/api.conf"
     

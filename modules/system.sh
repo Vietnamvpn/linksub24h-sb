@@ -305,6 +305,53 @@ update_script() {
         
         chmod +x $APP_DIR/main.sh
         chmod +x $APP_DIR/modules/*.sh
+        
+        # =========================================================================
+        # TỰ ĐỘNG VÁ LỖI MẤT FILE SERVICE
+        # =========================================================================
+        echo -e "${YELLOW}--> Đang kiểm tra tính toàn vẹn của các dịch vụ hệ thống...${NC}"
+        
+        # Khôi phục log-forwarder.service nếu bị mất
+        if [ ! -f /etc/systemd/system/log-forwarder.service ]; then
+            echo -e "${YELLOW}    [+] Phát hiện thiếu log-forwarder.service, đang khôi phục...${NC}"
+            cat << 'EOF' > /etc/systemd/system/log-forwarder.service
+[Unit]
+Description=Sing-box Log Forwarder (Batch Mode)
+After=sing-box.service
+[Service]
+ExecStart=/usr/local/bin/log-forwarder.sh
+Restart=always
+RestartSec=5
+[Install]
+WantedBy=multi-user.target
+EOF
+            systemctl daemon-reload
+            systemctl enable log-forwarder &>/dev/null
+        fi
+
+        # Khôi phục node-api.service nếu bị mất
+        if [ ! -f /etc/systemd/system/node-api.service ]; then
+            echo -e "${YELLOW}    [+] Phát hiện thiếu node-api.service, đang khôi phục...${NC}"
+            cat << 'EOF' > /etc/systemd/system/node-api.service
+[Unit]
+Description=Go API Server for Sing-box Node Management
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/usr/local/bin
+ExecStart=/usr/local/bin/node-api
+Restart=on-failure
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+            systemctl daemon-reload
+        fi
+        # =========================================================================
+
         # ---------------------------------------------------------
         echo -e "${YELLOW}--> Đang biên dịch lại các thành phần cốt lõi...${NC}"
         if [ -f "$APP_DIR/api_server.go" ]; then

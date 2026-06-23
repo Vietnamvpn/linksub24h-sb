@@ -282,6 +282,15 @@ delete_node() {
         echo -e "${GREEN}--> Đã dọn sạch TẤT CẢ các node đang có!${NC}"
         sleep 3
     else
+        # BƯỚC MỚI: Kiểm tra cổng có tồn tại trong database không
+        check_port=$(sqlite3 $DB_FILE "SELECT port FROM users WHERE port=$del_port;")
+        
+        if [ -z "$check_port" ]; then
+            echo -e "${RED}Lỗi: Cổng $del_port không tồn tại trong hệ thống!${NC}"
+            sleep 3
+            return
+        fi
+        
         # Logic giữ nguyên: Xóa 1 node cụ thể
         jq "del(.inbounds[] | select(.listen_port == $del_port))" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
         ufw delete allow $del_port/udp &>/dev/null

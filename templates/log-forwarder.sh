@@ -15,7 +15,7 @@ journalctl -u sing-box -f -n 0 | while read -r line; do
         echo "$line" >> "$TEMP_LOG"
     fi
 done &
-PID_JOURNAL=$=$!
+PID_JOURNAL=$!
 
 VPS_IP=$(curl -s -m 5 ifconfig.me || curl -s -m 5 icanhazip.com)
 trap 'kill $PID_JOURNAL; exit 0' SIGTERM SIGINT
@@ -48,38 +48,56 @@ while true; do
         mv "$TEMP_LOG" "${TEMP_LOG}.sending"
         touch "$TEMP_LOG"
         
-        # Sử dụng AWK cải tiến bộ nhận diện Regex chuẩn định dạng Sing-box Core
+        # Sử dụng AWK cải tiến: Liên kết đa dòng qua Connection ID và nhận diện chính xác cặp ngoặc tên User
         JSON_STATS=$(awk '
         {
-            user = ""
-            # Trích xuất username trong cặp ngoặc vuông inbound/tag[username]
-            if (match($0, /inbound\/[^\[:]+\[[^\]]+\]/)) {
-                matched_str = substr($0, RSTART, RLENGTH)
-                idx_open = index(matched_str, "[")
-                idx_close = index(matched_str, "]")
-                user = substr(matched_str, idx_open + 1, idx_close - idx_open - 1)
+            # A. Trích xuất Connection ID để liên kết dữ liệu đa dòng
+            conn_id = ""
+            if (match($0, /INFO \[[0-9]+/)) {
+                conn_id = substr($0, RSTART+6, RLENGTH-6)
             }
             
+            # B. Trích xuất chuẩn xác Username nằm ở cặp ngoặc vuông thứ 2 sau dấu hai chấm (Ví dụ: ]: [user_sub_229])
+            user = ""
+            if (match($0, /\]: \[[^\]]+\]/)) {
+                user = substr($0, RSTART+4, RLENGTH-5)
+            }
+            
+            # Lưu vết ánh xạ hoặc tái thiết lập Username qua bộ nhớ đệm Connection ID
+            if (conn_id != "" && user != "") {
+                conn_user[conn_id] = user
+            }
+            if (conn_id != "" && user == "") {
+                user = conn_user[conn_id]
+            }
+            
+            # C. Trích xuất IP nguồn kết nối từ log dòng chứa thông tin IP
+            ip = ""
+            if (match($0, /(from|từ) [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/)) {
+                matched_ip_str = substr($0, RSTART, RLENGTH)
+                split(matched_ip_str, ip_parts, " ")
+                ip = ip_parts[2]
+            }
+            
+            # Lưu vết ánh xạ hoặc tái thiết lập IP qua bộ nhớ đệm Connection ID
+            if (conn_id != "" && ip != "") {
+                conn_ip[conn_id] = ip
+            }
+            if (conn_id != "" && ip == "") {
+                ip = conn_ip[conn_id]
+            }
+            
+            # D. Ghi nhận mối quan hệ đồng bộ giữa User và IP không trùng lặp
+            if (user != "" && ip != "") {
+                if (!((user "," ip) in seen)) {
+                    ips[user] = (ips[user] == "" ? ip : ips[user] "," ip)
+                    ip_count[user]++
+                    seen[user "," ip] = 1
+                }
+            }
+            
+            # E. Trích xuất và cộng dồn lưu lượng dung lượng Traffic (tx / rx)
             if (user != "") {
-                # Trích xuất IP nguồn kết nối
-                ip = ""
-                if (match($0, /(from|từ) [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/)) {
-                    matched_ip_str = substr($0, RSTART, RLENGTH)
-                    split(matched_ip_str, ip_parts, " ")
-                    ip = ip_parts[2]
-                }
-                
-                # Lưu vết các IP không trùng lặp của user
-                if (ip != "") {
-                    if (!((user "," ip) in seen)) {
-                        ips[user] = (ips[user] == "" ? ip : ips[user] "," ip)
-                        ip_count[user]++
-                        seen[user "," ip] = 1
-                    }
-                }
-                
-                # --- SỬA ĐỔI REGEX THÔNG MINH CHO SING-BOX LOG CORNER ---
-                # Đọc định dạng số đứng trước (Mặc định Sing-box: 1024 bytes tx, 450 bytes rx)
                 if (match($0, /[0-9]+( bytes)? tx/)) {
                     m = substr($0, RSTART, RLENGTH)
                     gsub(/[^0-9]/, "", m)
@@ -90,14 +108,13 @@ while true; do
                     gsub(/[^0-9]/, "", m)
                     traffic[user] += m
                 }
-                # Dự phòng định dạng từ khóa đứng trước (Dạng nâng cao: tx: 1024, rx: 450)
                 if (match($0, /(tx|upload|up|rx|download|down)[: ]+[0-9]+/)) {
                     m = substr($0, RSTART, RLENGTH)
                     gsub(/[^0-9]/, "", m)
                     traffic[user] += m
                 }
                 
-                # Khởi tạo mặc định nếu user chưa từng có bộ đếm trước đó
+                # Khởi tạo mặc định để đảm bảo user xuất hiện đầy đủ trong danh sách xuất JSON
                 if (!(user in ip_count)) {
                     ip_count[user] = 0
                     ips[user] = ""

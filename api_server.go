@@ -60,7 +60,7 @@ func nodeActionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Gọi script bash
-	cmd := exec.Command("bash", "/root/singbox-manager/modules/users.sh", "api", payload.Action, payload.Username)
+	cmd := exec.Command("bash", "/usr/local/singbox-manager/modules/users.sh", "api", payload.Action, payload.Username)
 	output, err := cmd.CombinedOutput()
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {

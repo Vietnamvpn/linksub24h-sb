@@ -15,7 +15,7 @@ journalctl -u sing-box -f -n 0 | while read -r line; do
         echo "$line" >> "$TEMP_LOG"
     fi
 done &
-PID_JOURNAL=$!
+PID_JOURNAL=$=$!
 
 VPS_IP=$(curl -s -m 5 ifconfig.me || curl -s -m 5 icanhazip.com)
 trap 'kill $PID_JOURNAL; exit 0' SIGTERM SIGINT
@@ -48,7 +48,7 @@ while true; do
         mv "$TEMP_LOG" "${TEMP_LOG}.sending"
         touch "$TEMP_LOG"
         
-        # Sử dụng AWK tối ưu hóa hiệu năng bóc tách, tránh sinh vòng lặp bash chậm chạp
+        # Sử dụng AWK cải tiến bộ nhận diện Regex chuẩn định dạng Sing-box Core
         JSON_STATS=$(awk '
         {
             user = ""
@@ -61,7 +61,7 @@ while true; do
             }
             
             if (user != "") {
-                # Trích xuất IP nguồn kết nối (hỗ trợ cả tiếng Anh "from" và tiếng Việt "từ")
+                # Trích xuất IP nguồn kết nối
                 ip = ""
                 if (match($0, /(from|từ) [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/)) {
                     matched_ip_str = substr($0, RSTART, RLENGTH)
@@ -78,26 +78,26 @@ while true; do
                     }
                 }
                 
-                # Trích xuất thông số dung lượng upload / tx (nếu có)
-                if (match($0, /(upload|up|tx)[: ]+[0-9]+/)) {
+                # --- SỬA ĐỔI REGEX THÔNG MINH CHO SING-BOX LOG CORNER ---
+                # Đọc định dạng số đứng trước (Mặc định Sing-box: 1024 bytes tx, 450 bytes rx)
+                if (match($0, /[0-9]+( bytes)? tx/)) {
                     m = substr($0, RSTART, RLENGTH)
                     gsub(/[^0-9]/, "", m)
                     traffic[user] += m
                 }
-                # Trích xuất thông số dung lượng download / rx (nếu có)
-                if (match($0, /(download|down|rx)[: ]+[0-9]+/)) {
+                if (match($0, /[0-9]+( bytes)? rx/)) {
                     m = substr($0, RSTART, RLENGTH)
                     gsub(/[^0-9]/, "", m)
                     traffic[user] += m
                 }
-                # Fallback cho định dạng bytes chung
-                if (match($0, /(bytes|traffic)[: ]+[0-9]+/)) {
+                # Dự phòng định dạng từ khóa đứng trước (Dạng nâng cao: tx: 1024, rx: 450)
+                if (match($0, /(tx|upload|up|rx|download|down)[: ]+[0-9]+/)) {
                     m = substr($0, RSTART, RLENGTH)
                     gsub(/[^0-9]/, "", m)
                     traffic[user] += m
                 }
                 
-                # Khởi tạo mặc định nếu user chưa từng có bộ đếm kết nối trước đó
+                # Khởi tạo mặc định nếu user chưa từng có bộ đếm trước đó
                 if (!(user in ip_count)) {
                     ip_count[user] = 0
                     ips[user] = ""

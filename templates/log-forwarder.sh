@@ -9,9 +9,9 @@ RESULT_LOG="/tmp/webhook_result.log"
 # Đảm bảo quyền truy cập
 chmod 666 "$TEMP_LOG" "$RESULT_LOG"
 
-# 1. Tiến trình chạy ngầm: Đọc log liên tục từ sing-box
+# 1. Tiến trình chạy ngầm: Thu thập toàn bộ log liên quan đến inbound để xử lý cả IP và Traffic
 journalctl -u sing-box -f -n 0 | while read -r line; do
-    if [[ "$line" =~ "inbound/" && "$line" =~ "inbound connection to" ]]; then
+    if [[ "$line" =~ "inbound/" ]]; then
         echo "$line" >> "$TEMP_LOG"
     fi
 done &
@@ -20,12 +20,11 @@ PID_JOURNAL=$!
 VPS_IP=$(curl -s -m 5 ifconfig.me || curl -s -m 5 icanhazip.com)
 trap 'kill $PID_JOURNAL; exit 0' SIGTERM SIGINT
 
-# 2. Vòng lặp chính: Gửi dữ liệu và Tự dọn dẹp log
+# 2. Vòng lặp chính: Phân tích dữ liệu, gom nhóm theo User và gửi JSON lên Web Panel
 while true; do
     sleep 60
     
     # --- TỰ ĐỘNG DỌN DẸP LOG KẾT QUẢ ---
-    # Kiểm tra nếu file > 512KB (524288 bytes) thì làm mới
     if [ -f "$RESULT_LOG" ] && [ $(stat -c%s "$RESULT_LOG") -gt 524288 ]; then
         echo "$(date '+%Y-%m-%d %H:%M:%S') | Log đã đầy, tự động làm mới..." > "$RESULT_LOG"
     fi
@@ -35,30 +34,106 @@ while true; do
         continue
     fi
     
-    # Lấy cấu hình (hỗ trợ cả định dạng mới KEY=VALUE và định dạng cũ)
+    # Lấy thông tin cấu hình đồng bộ
     PHP_URL=$(grep "WEB_URL=" "$CONF_FILE" | cut -d'=' -f2)
     if [ -z "$PHP_URL" ]; then 
-        PHP_URL=$(cat "$CONF_FILE" | head -n 1) # Fallback lấy dòng đầu tiên nếu cấu hình kiểu cũ
+        PHP_URL=$(cat "$CONF_FILE" | head -n 1)
     fi
     
     API_PORT=$(grep "PORT=" "$CONF_FILE" | cut -d'=' -f2)
     API_TOKEN=$(grep "TOKEN=" "$CONF_FILE" | cut -d'=' -f2)
     
-    # Gửi dữ liệu
+    # Xử lý gom nhóm và gửi dữ liệu nếu có log phát sinh
     if [ -s "$TEMP_LOG" ] && [ -n "$PHP_URL" ]; then
         mv "$TEMP_LOG" "${TEMP_LOG}.sending"
         touch "$TEMP_LOG"
         
-        LOG_CONTENT=$(cat "${TEMP_LOG}.sending" | sed 's/"/\\"/g' | awk '{printf "%s\\n", $0}')
+        # Sử dụng AWK tối ưu hóa hiệu năng bóc tách, tránh sinh vòng lặp bash chậm chạp
+        JSON_STATS=$(awk '
+        {
+            user = ""
+            # Trích xuất username trong cặp ngoặc vuông inbound/tag[username]
+            if (match($0, /inbound\/[^\[:]+\[[^\]]+\]/)) {
+                matched_str = substr($0, RSTART, RLENGTH)
+                idx_open = index(matched_str, "[")
+                idx_close = index(matched_str, "]")
+                user = substr(matched_str, idx_open + 1, idx_close - idx_open - 1)
+            }
+            
+            if (user != "") {
+                # Trích xuất IP nguồn kết nối (hỗ trợ cả tiếng Anh "from" và tiếng Việt "từ")
+                ip = ""
+                if (match($0, /(from|từ) [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/)) {
+                    matched_ip_str = substr($0, RSTART, RLENGTH)
+                    split(matched_ip_str, ip_parts, " ")
+                    ip = ip_parts[2]
+                }
+                
+                # Lưu vết các IP không trùng lặp của user
+                if (ip != "") {
+                    if (!((user "," ip) in seen)) {
+                        ips[user] = (ips[user] == "" ? ip : ips[user] "," ip)
+                        ip_count[user]++
+                        seen[user "," ip] = 1
+                    }
+                }
+                
+                # Trích xuất thông số dung lượng upload / tx (nếu có)
+                if (match($0, /(upload|up|tx)[: ]+[0-9]+/)) {
+                    m = substr($0, RSTART, RLENGTH)
+                    gsub(/[^0-9]/, "", m)
+                    traffic[user] += m
+                }
+                # Trích xuất thông số dung lượng download / rx (nếu có)
+                if (match($0, /(download|down|rx)[: ]+[0-9]+/)) {
+                    m = substr($0, RSTART, RLENGTH)
+                    gsub(/[^0-9]/, "", m)
+                    traffic[user] += m
+                }
+                # Fallback cho định dạng bytes chung
+                if (match($0, /(bytes|traffic)[: ]+[0-9]+/)) {
+                    m = substr($0, RSTART, RLENGTH)
+                    gsub(/[^0-9]/, "", m)
+                    traffic[user] += m
+                }
+                
+                # Khởi tạo mặc định nếu user chưa từng có bộ đếm kết nối trước đó
+                if (!(user in ip_count)) {
+                    ip_count[user] = 0
+                    ips[user] = ""
+                }
+            }
+        }
+        END {
+            printf "["
+            first = 1
+            for (u in ip_count) {
+                if (!first) printf ","
+                first = 0
+                t_bytes = (traffic[u] == "" ? 0 : traffic[u])
+                printf "{\"username\":\"%s\",\"concurrent_ips\":%d,\"active_ips\":\"%s\",\"data_bytes\":%d}", u, ip_count[u], ips[u], t_bytes
+            }
+            printf "]"
+        }' "${TEMP_LOG}.sending")
         
-        # Gắn thêm Header X-API-Port và X-API-Token vào lệnh curl
-        RESPONSE=$(curl -s -w "\nHTTP_STATUS: %{http_code}" -X POST "$PHP_URL" \
-             -H "Content-Type: application/json" \
-             -H "X-API-Port: $API_PORT" \
-             -H "X-API-Token: $API_TOKEN" \
-             -d "{\"vps_ip\":\"$VPS_IP\", \"batch\": true, \"log\":\"$LOG_CONTENT\"}")
-             
-        echo "$(date '+%Y-%m-%d %H:%M:%S') | Phản hồi: $RESPONSE" >> "$RESULT_LOG"
+        # Nếu trích xuất được dữ liệu người dùng hợp lệ, đóng gói cấu trúc JSON chuẩn qua jq
+        if [ "$JSON_STATS" != "[]" ] && [ -n "$JSON_STATS" ]; then
+            PAYLOAD=$(jq -n \
+                --arg vps_ip "$VPS_IP" \
+                --arg port "$API_PORT" \
+                --argjson stats "$JSON_STATS" \
+                '{vps_ip: $vps_ip, server_port: $port, stats: $stats}')
+                
+            # Đẩy dữ liệu cấu trúc mảng lên API Web nhận xử lý
+            RESPONSE=$(curl -s -w "\nHTTP_STATUS: %{http_code}" -X POST "$PHP_URL" \
+                 -H "Content-Type: application/json" \
+                 -H "X-API-Port: $API_PORT" \
+                 -H "X-API-Token: $API_TOKEN" \
+                 -d "$PAYLOAD")
+                 
+            echo "$(date '+%Y-%m-%d %H:%M:%S') | Đã gửi thống kê. Phản hồi Web: $RESPONSE" >> "$RESULT_LOG"
+        fi
+        
         rm -f "${TEMP_LOG}.sending"
     fi
 done

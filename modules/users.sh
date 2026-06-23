@@ -11,6 +11,16 @@ if [ "$1" == "api" ]; then
     if [ "$action" == "add" ]; then
         db_count=$(sqlite3 $DB_FILE "SELECT COUNT(*) FROM users WHERE user_key LIKE '$sub_id:%';")
         
+        # --- THÊM MỚI: Lấy Quốc Gia của Server ---
+        # Gọi API lấy tên quốc gia, đổi khoảng trắng thành dấu gạch dưới. Thêm timeout 2s để tránh treo script.
+        IP_COUNTRY=$(curl -s --max-time 2 http://ip-api.com/line?fields=country | tr ' ' '_')
+        # Nếu API lỗi hoặc rỗng, đặt mặc định là Unknown
+        if [ -z "$IP_COUNTRY" ]; then IP_COUNTRY="Unknown"; fi
+        
+        # Khởi tạo biến đếm index cho node
+        node_idx=1
+        # -----------------------------------------
+
         # 1. NẾU USER ĐÃ TỒN TẠI -> LẤY LẠI LINK CŨ ĐỂ TRẢ VỀ API
         if [ "$db_count" -gt 0 ]; then
             sqlite3 $DB_FILE "SELECT node_type, port, domain, user_key FROM users WHERE user_key LIKE '$sub_id:%';" | while read -r row; do
@@ -31,13 +41,19 @@ if [ "$1" == "api" ]; then
                 fi
                 if [ -z "$sni" ] || [ "$sni" == "null" ]; then sni="bing.com"; fi
                 
+                # --- THÊM MỚI: Định dạng Tag (Ví dụ: United_States-01) ---
+                FORMATTED_IDX=$(printf "%02d" $node_idx)
+                NODE_NAME="${IP_COUNTRY}-${FORMATTED_IDX}"
+                node_idx=$((node_idx + 1))
+                # ---------------------------------------------------------
+                
                 if [ "$ntype" == "hysteria2" ]; then
-                    echo "hysteria2://$upass@$dom:$port?insecure=1&sni=$sni#$sub_id"
+                    echo "hysteria2://$upass@$dom:$port?insecure=1&sni=$sni#$NODE_NAME"
                 elif [ "$ntype" == "tuic" ]; then
-                    echo "tuic://$uuid:$upass@$dom:$port?congestion_control=bbr&udp_relay_mode=native&alpn=h3&sni=$sni&allow_insecure=1#$sub_id"
+                    echo "tuic://$uuid:$upass@$dom:$port?congestion_control=bbr&udp_relay_mode=native&alpn=h3&sni=$sni&allow_insecure=1#$NODE_NAME"
                 elif [ "$ntype" == "vless" ]; then
                     if [ -z "$pub_k" ]; then pub_k="reused_key"; fi
-                    echo "vless://$uuid@$dom:$port?security=reality&encryption=none&pbk=$pub_k&headerType=none&fp=chrome&spx=%2F&type=grpc&sni=$sni&serviceName=vless-grpc&sid=0123456789abcdef#$sub_id"
+                    echo "vless://$uuid@$dom:$port?security=reality&encryption=none&pbk=$pub_k&headerType=none&fp=chrome&spx=%2F&type=grpc&sni=$sni&serviceName=vless-grpc&sid=0123456789abcdef#$NODE_NAME"
                 fi
             done
             exit 0
@@ -48,6 +64,9 @@ if [ "$1" == "api" ]; then
         uuid_gen=$(cat /proc/sys/kernel/random/uuid)
         ports=$(jq -r '.inbounds[].listen_port' $CONFIG_FILE)
         
+        # Reset lại biến đếm cho trường hợp tạo mới
+        node_idx=1
+        
         for p in $ports; do
             type=$(jq -r ".inbounds[] | select(.listen_port == $p) | .type" $CONFIG_FILE)
             
@@ -57,19 +76,25 @@ if [ "$1" == "api" ]; then
             sni=$(jq -r ".inbounds[] | select(.listen_port == $p).tls.server_name" $CONFIG_FILE 2>/dev/null)
             if [ -z "$sni" ] || [ "$sni" == "null" ]; then sni="bing.com"; fi
             
+            # --- THÊM MỚI: Định dạng Tag (Ví dụ: United_States-01) ---
+            FORMATTED_IDX=$(printf "%02d" $node_idx)
+            NODE_NAME="${IP_COUNTRY}-${FORMATTED_IDX}"
+            node_idx=$((node_idx + 1))
+            # ---------------------------------------------------------
+            
             if [ "$type" == "hysteria2" ]; then
                 jq "(.inbounds[] | select(.listen_port == $p).users) += [{\"name\": \"$sub_id\", \"password\": \"$upass\"}]" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
                 sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('hysteria2', $p, '$dom', '$sub_id::$upass::');"
                 
-                # Sửa lỗi Hysteria2 không trả link
-                echo "hysteria2://$upass@$dom:$p?insecure=1&sni=$sni#$sub_id"
+                # Sửa đổi phần đuôi thành #$NODE_NAME
+                echo "hysteria2://$upass@$dom:$p?insecure=1&sni=$sni#$NODE_NAME"
                 
             elif [ "$type" == "tuic" ]; then
                 jq "(.inbounds[] | select(.listen_port == $p).users) += [{\"uuid\": \"$uuid_gen\", \"password\": \"$upass\"}]" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
                 sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('tuic', $p, '$dom', '$sub_id:$uuid_gen:$upass::');"
                 
-                # Sửa lỗi TUIC không trả link
-                echo "tuic://$uuid_gen:$upass@$dom:$p?congestion_control=bbr&udp_relay_mode=native&alpn=h3&sni=$sni&allow_insecure=1#$sub_id"
+                # Sửa đổi phần đuôi thành #$NODE_NAME
+                echo "tuic://$uuid_gen:$upass@$dom:$p?congestion_control=bbr&udp_relay_mode=native&alpn=h3&sni=$sni&allow_insecure=1#$NODE_NAME"
                 
             elif [ "$type" == "vless" ]; then
                 pub_k=$(sqlite3 $DB_FILE "SELECT user_key FROM users WHERE port=$p AND node_type='vless' LIMIT 1;" | cut -d':' -f4 | tr -d '\r')
@@ -77,8 +102,8 @@ if [ "$1" == "api" ]; then
                 jq "(.inbounds[] | select(.listen_port == $p).users) += [{\"uuid\": \"$uuid_gen\", \"name\": \"$sub_id\"}]" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
                 sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('vless', $p, '$dom', '$sub_id:$uuid_gen::$pub_k:$sni');"
                 
-                # VLESS giữ nguyên
-                echo "vless://$uuid_gen@$dom:$p?security=reality&encryption=none&pbk=$pub_k&headerType=none&fp=chrome&spx=%2F&type=grpc&sni=$sni&serviceName=vless-grpc&sid=0123456789abcdef#$sub_id"
+                # Sửa đổi phần đuôi thành #$NODE_NAME
+                echo "vless://$uuid_gen@$dom:$p?security=reality&encryption=none&pbk=$pub_k&headerType=none&fp=chrome&spx=%2F&type=grpc&sni=$sni&serviceName=vless-grpc&sid=0123456789abcdef#$NODE_NAME"
             fi
         done
         
@@ -100,7 +125,6 @@ if [ "$1" == "api" ]; then
     fi
     exit 0
 fi
-# --- KẾT THÚC KHỐI XỬ LÝ LỆNH API ---
 
 add_user_advanced() {
     clear

@@ -10,20 +10,40 @@ if [ "$1" == "api" ]; then
 
     if [ "$action" == "add" ]; then
         db_count=$(sqlite3 $DB_FILE "SELECT COUNT(*) FROM users WHERE user_key LIKE '$sub_id:%';")
+        
+        # 1. NẾU USER ĐÃ TỒN TẠI -> LẤY LẠI LINK CŨ ĐỂ TRẢ VỀ API
         if [ "$db_count" -gt 0 ]; then
-            pub_k=$(sqlite3 $DB_FILE "SELECT user_key FROM users WHERE user_key LIKE '$sub_id:%' AND node_type='vless' LIMIT 1;" | cut -d':' -f4 | tr -d '\r')
-            uuid_gen=$(sqlite3 $DB_FILE "SELECT user_key FROM users WHERE user_key LIKE '$sub_id:%' AND node_type='vless' LIMIT 1;" | cut -d':' -f2 | tr -d '\r')
-            port=$(sqlite3 $DB_FILE "SELECT port FROM users WHERE user_key LIKE '$sub_id:%' AND node_type='vless' LIMIT 1;")
-            sni=$(jq -r ".inbounds[] | select(.listen_port == $port).tls.server_name" $CONFIG_FILE)
-            
-            # Lấy domain chuẩn từ Database cho Node cũ
-            dom=$(sqlite3 $DB_FILE "SELECT domain FROM users WHERE port=$port LIMIT 1;")
-            if [ -z "$dom" ]; then dom=$(curl -s ifconfig.me); fi
-            
-            echo "vless://$uuid_gen@$dom:$port?security=reality&encryption=none&pbk=$pub_k&headerType=none&fp=chrome&spx=%2F&type=grpc&sni=$sni&serviceName=vless-grpc&sid=0123456789abcdef"
+            sqlite3 $DB_FILE "SELECT node_type, port, domain, user_key FROM users WHERE user_key LIKE '$sub_id:%';" | while read -r row; do
+                ntype=$(echo "$row" | cut -d'|' -f1)
+                port=$(echo "$row" | cut -d'|' -f2)
+                dom=$(echo "$row" | cut -d'|' -f3)
+                ukey=$(echo "$row" | cut -d'|' -f4)
+                
+                uuid=$(echo "$ukey" | cut -d':' -f2)
+                upass=$(echo "$ukey" | cut -d':' -f3)
+                pub_k=$(echo "$ukey" | cut -d':' -f4)
+                db_sni=$(echo "$ukey" | cut -d':' -f5)
+                
+                if [ -z "$db_sni" ]; then
+                    sni=$(jq -r ".inbounds[] | select(.listen_port == $port).tls.server_name" $CONFIG_FILE 2>/dev/null)
+                else
+                    sni=$db_sni
+                fi
+                if [ -z "$sni" ] || [ "$sni" == "null" ]; then sni="bing.com"; fi
+                
+                if [ "$ntype" == "hysteria2" ]; then
+                    echo "hysteria2://$upass@$dom:$port?insecure=1&sni=$sni#$sub_id"
+                elif [ "$ntype" == "tuic" ]; then
+                    echo "tuic://$uuid:$upass@$dom:$port?congestion_control=bbr&udp_relay_mode=native&alpn=h3&sni=$sni&allow_insecure=1#$sub_id"
+                elif [ "$ntype" == "vless" ]; then
+                    if [ -z "$pub_k" ]; then pub_k="reused_key"; fi
+                    echo "vless://$uuid@$dom:$port?security=reality&encryption=none&pbk=$pub_k&headerType=none&fp=chrome&spx=%2F&type=grpc&sni=$sni&serviceName=vless-grpc&sid=0123456789abcdef#$sub_id"
+                fi
+            done
             exit 0
         fi
         
+        # 2. NẾU USER MỚI -> TẠO MỚI VÀ IN LINK TẤT CẢ CÁC LOẠI GIAO THỨC TRẢ VỀ API
         upass=$(tr -dc 'a-zA-Z0-9' </dev/urandom | head -c 10)
         uuid_gen=$(cat /proc/sys/kernel/random/uuid)
         ports=$(jq -r '.inbounds[].listen_port' $CONFIG_FILE)
@@ -31,27 +51,37 @@ if [ "$1" == "api" ]; then
         for p in $ports; do
             type=$(jq -r ".inbounds[] | select(.listen_port == $p) | .type" $CONFIG_FILE)
             
-            # Lấy domain chuẩn từ Database cho Node mới được duyệt tới
             dom=$(sqlite3 $DB_FILE "SELECT domain FROM users WHERE port=$p LIMIT 1;")
             if [ -z "$dom" ]; then dom=$(curl -s ifconfig.me); fi
+            
+            sni=$(jq -r ".inbounds[] | select(.listen_port == $p).tls.server_name" $CONFIG_FILE 2>/dev/null)
+            if [ -z "$sni" ] || [ "$sni" == "null" ]; then sni="bing.com"; fi
             
             if [ "$type" == "hysteria2" ]; then
                 jq "(.inbounds[] | select(.listen_port == $p).users) += [{\"name\": \"$sub_id\", \"password\": \"$upass\"}]" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
                 sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('hysteria2', $p, '$dom', '$sub_id::$upass::');"
+                
+                # Sửa lỗi Hysteria2 không trả link
+                echo "hysteria2://$upass@$dom:$p?insecure=1&sni=$sni#$sub_id"
+                
             elif [ "$type" == "tuic" ]; then
                 jq "(.inbounds[] | select(.listen_port == $p).users) += [{\"uuid\": \"$uuid_gen\", \"password\": \"$upass\"}]" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
                 sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('tuic', $p, '$dom', '$sub_id:$uuid_gen:$upass::');"
+                
+                # Sửa lỗi TUIC không trả link
+                echo "tuic://$uuid_gen:$upass@$dom:$p?congestion_control=bbr&udp_relay_mode=native&alpn=h3&sni=$sni&allow_insecure=1#$sub_id"
+                
             elif [ "$type" == "vless" ]; then
-                sni=$(jq -r ".inbounds[] | select(.listen_port == $p).tls.server_name" $CONFIG_FILE)
                 pub_k=$(sqlite3 $DB_FILE "SELECT user_key FROM users WHERE port=$p AND node_type='vless' LIMIT 1;" | cut -d':' -f4 | tr -d '\r')
                 if [ -z "$pub_k" ]; then pub_k="reused_key"; fi
                 jq "(.inbounds[] | select(.listen_port == $p).users) += [{\"uuid\": \"$uuid_gen\", \"name\": \"$sub_id\"}]" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
                 sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('vless', $p, '$dom', '$sub_id:$uuid_gen::$pub_k:$sni');"
                 
-                # IN RA LINK ĐỂ API MANG VỀ WEB
-                echo "vless://$uuid_gen@$dom:$p?security=reality&encryption=none&pbk=$pub_k&headerType=none&fp=chrome&spx=%2F&type=grpc&sni=$sni&serviceName=vless-grpc&sid=0123456789abcdef"
+                # VLESS giữ nguyên
+                echo "vless://$uuid_gen@$dom:$p?security=reality&encryption=none&pbk=$pub_k&headerType=none&fp=chrome&spx=%2F&type=grpc&sni=$sni&serviceName=vless-grpc&sid=0123456789abcdef#$sub_id"
             fi
         done
+        
         systemctl restart sing-box
         exit 0
 

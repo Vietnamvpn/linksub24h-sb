@@ -320,7 +320,8 @@ toggle_user_status() {
             if [ "$ntype" == "hysteria2" ]; then
                 jq "(.inbounds[] | select(.listen_port == $port).users) += [{\"name\": \"$target_user\", \"password\": \"$upass\"}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
             elif [ "$ntype" == "tuic" ]; then
-                jq "(.inbounds[] | select(.listen_port == $port).users) += [{\"uuid\": \"$uuid\", \"password\": \"$upass\"}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
+                # Đã bổ sung trường "name" vào dòng dưới đây
+                jq "(.inbounds[] | select(.listen_port == $port).users) += [{\"name\": \"$target_user\", \"uuid\": \"$uuid\", \"password\": \"$upass\"}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
             elif [ "$ntype" == "vless" ]; then
                 jq "(.inbounds[] | select(.listen_port == $port).users) += [{\"uuid\": \"$uuid\", \"name\": \"$target_user\"}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
             fi

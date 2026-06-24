@@ -229,6 +229,12 @@ add_user_advanced() {
         fi
     fi
     set -e 
+    # Đẩy tên user vào mảng stats (dùng unique để không bị lặp tên nếu add vào nhiều port)
+if [ "$1" == "api" ]; then
+    jq ".experimental.v2ray_api.stats.users += [\"$sub_id\"] | .experimental.v2ray_api.stats.users |= unique" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
+else
+    jq ".experimental.v2ray_api.stats.users += [\"$uname\"] | .experimental.v2ray_api.stats.users |= unique" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
+fi
     systemctl restart sing-box; sleep 3
 }
 
@@ -258,6 +264,12 @@ delete_user_menu() {
         else
             jq "(.inbounds[] | select(.listen_port == $port and has(\"users\")).users) |= map(select((.name // \"\") != \"$target_del\" and (.uuid // \"\") != \"$target_uuid\"))" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
             sqlite3 $DB_FILE "DELETE FROM users WHERE port=$port AND user_key LIKE '$target_del:%';"
+            # Rút tên user khỏi mảng stats
+if [ "$1" == "api" ]; then
+    jq "if .experimental.v2ray_api.stats.users then .experimental.v2ray_api.stats.users |= map(select(. != \"$sub_id\")) else . end" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
+else
+    jq "if .experimental.v2ray_api.stats.users then .experimental.v2ray_api.stats.users |= map(select(. != \"$target_del\")) else . end" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
+fi
             systemctl restart sing-box
             echo -e "${GREEN} Đã xóa User [$target_del] khỏi cổng $port!${NC}"; sleep 3
         fi

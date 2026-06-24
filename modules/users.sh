@@ -107,6 +107,9 @@ if [ "$1" == "api" ]; then
             fi
         done
         
+        # Đẩy tên user vào mảng stats trước khi restart
+        jq ".experimental.v2ray_api.stats.users += [\"$sub_id\"] | .experimental.v2ray_api.stats.users |= unique" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
+        
         systemctl restart sing-box
         exit 0
 
@@ -114,6 +117,10 @@ if [ "$1" == "api" ]; then
         target_uuid=$(sqlite3 $DB_FILE "SELECT user_key FROM users WHERE user_key LIKE '$sub_id:%' AND node_type IN ('tuic', 'vless') LIMIT 1;" | cut -d':' -f2 | tr -d '\r')
         jq "(.inbounds[] | select(has(\"users\")).users) |= map(select((.name // \"\") != \"$sub_id\" and (.uuid // \"\") != \"$target_uuid\"))" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
         sqlite3 $DB_FILE "DELETE FROM users WHERE user_key LIKE '$sub_id:%';"
+        
+        # Rút tên user khỏi mảng stats trước khi restart
+        jq "if .experimental.v2ray_api.stats.users then .experimental.v2ray_api.stats.users |= map(select(. != \"$sub_id\")) else . end" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
+        
         systemctl restart sing-box
         exit 0
 
@@ -214,7 +221,8 @@ add_user_advanced() {
                 jq "(.inbounds[] | select(.listen_port == $target_port).users) += [{\"name\": \"$uname\", \"password\": \"$upass\"}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
                 sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('hysteria2', $target_port, '$safe_dom', '$safe_uname::$safe_upass::');"
             elif [ "$type" == "tuic" ]; then
-                jq "(.inbounds[] | select(.listen_port == $target_port).users) += [{\"uuid\": \"$uuid_gen\", \"password\": \"$upass\"}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
+                # Đã thêm "name" cho giao thức tuic tại đây
+                jq "(.inbounds[] | select(.listen_port == $target_port).users) += [{\"name\": \"$uname\", \"uuid\": \"$uuid_gen\", \"password\": \"$upass\"}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
                 sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('tuic', $target_port, '$safe_dom', '$safe_uname:$uuid_gen:$safe_upass::');"
             elif [ "$type" == "vless" ]; then
                 sni=$(jq -r ".inbounds[] | select(.listen_port == $target_port).tls.server_name" $CONFIG_FILE)
@@ -229,12 +237,10 @@ add_user_advanced() {
         fi
     fi
     set -e 
+    
     # Đẩy tên user vào mảng stats (dùng unique để không bị lặp tên nếu add vào nhiều port)
-if [ "$1" == "api" ]; then
-    jq ".experimental.v2ray_api.stats.users += [\"$sub_id\"] | .experimental.v2ray_api.stats.users |= unique" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
-else
     jq ".experimental.v2ray_api.stats.users += [\"$uname\"] | .experimental.v2ray_api.stats.users |= unique" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
-fi
+    
     systemctl restart sing-box; sleep 3
 }
 
@@ -259,17 +265,19 @@ delete_user_menu() {
         if [ -z "$port" ]; then
             jq "(.inbounds[] | select(has(\"users\")).users) |= map(select((.name // \"\") != \"$target_del\" and (.uuid // \"\") != \"$target_uuid\"))" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
             sqlite3 $DB_FILE "DELETE FROM users WHERE user_key LIKE '$target_del:%';"
+            
+            # Rút tên user khỏi mảng stats trước khi restart
+            jq "if .experimental.v2ray_api.stats.users then .experimental.v2ray_api.stats.users |= map(select(. != \"$target_del\")) else . end" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
+            
             systemctl restart sing-box
             echo -e "${GREEN} Đã dọn sạch User [$target_del] khỏi TOÀN BỘ các Node!${NC}"; sleep 3
         else
             jq "(.inbounds[] | select(.listen_port == $port and has(\"users\")).users) |= map(select((.name // \"\") != \"$target_del\" and (.uuid // \"\") != \"$target_uuid\"))" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
             sqlite3 $DB_FILE "DELETE FROM users WHERE port=$port AND user_key LIKE '$target_del:%';"
-            # Rút tên user khỏi mảng stats
-if [ "$1" == "api" ]; then
-    jq "if .experimental.v2ray_api.stats.users then .experimental.v2ray_api.stats.users |= map(select(. != \"$sub_id\")) else . end" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
-else
-    jq "if .experimental.v2ray_api.stats.users then .experimental.v2ray_api.stats.users |= map(select(. != \"$target_del\")) else . end" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
-fi
+            
+            # Rút tên user khỏi mảng stats trước khi restart
+            jq "if .experimental.v2ray_api.stats.users then .experimental.v2ray_api.stats.users |= map(select(. != \"$target_del\")) else . end" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
+            
             systemctl restart sing-box
             echo -e "${GREEN} Đã xóa User [$target_del] khỏi cổng $port!${NC}"; sleep 3
         fi

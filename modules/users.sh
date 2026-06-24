@@ -90,7 +90,7 @@ if [ "$1" == "api" ]; then
                 echo "hysteria2://$upass@$dom:$p?insecure=1&sni=$sni#$NODE_NAME"
                 
             elif [ "$type" == "tuic" ]; then
-                jq "(.inbounds[] | select(.listen_port == $p).users) += [{\"uuid\": \"$uuid_gen\", \"password\": \"$upass\"}]" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
+                jq "(.inbounds[] | select(.listen_port == $p).users) += [{\"name\": \"$sub_id\", \"uuid\": \"$uuid_gen\", \"password\": \"$upass\"}]" $CONFIG_FILE > tmp.json && mv tmp.json $CONFIG_FILE
                 sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('tuic', $p, '$dom', '$sub_id:$uuid_gen:$upass::');"
                 
                 # Sửa đổi phần đuôi thành #$NODE_NAME
@@ -186,7 +186,7 @@ add_user_advanced() {
                 sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('hysteria2', $p, '$safe_dom', '$safe_uname::$safe_upass::');"
                 success_count=$((success_count + 1))
             elif [ "$type" == "tuic" ]; then
-                jq "(.inbounds[] | select(.listen_port == $p).users) += [{\"uuid\": \"$uuid_gen\", \"password\": \"$upass\"}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
+                jq "(.inbounds[] | select(.listen_port == $p).users) += [{\"name\": \"$uname\", \"uuid\": \"$uuid_gen\", \"password\": \"$upass\"}]" $CONFIG_FILE > tmp.json && [ -s tmp.json ] && mv tmp.json $CONFIG_FILE || rm -f tmp.json
                 sqlite3 $DB_FILE "INSERT INTO users (node_type, port, domain, user_key) VALUES ('tuic', $p, '$safe_dom', '$safe_uname:$uuid_gen:$safe_upass::');"
                 success_count=$((success_count + 1))
             elif [ "$type" == "vless" ]; then
